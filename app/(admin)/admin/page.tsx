@@ -1,106 +1,211 @@
+import connectToDatabase from '@/lib/mongodb'
+import { Order, User, Product } from '@/lib/models'
+
 // Force dynamic rendering for admin pages that use auth()
 export const dynamic = 'force-dynamic'
 
-export default function AdminDashboardPage() {
+async function getSimpleStats() {
+  try {
+    await connectToDatabase()
+    
+    const [userCount, orderCount, productCount] = await Promise.allSettled([
+      User.countDocuments(),
+      Order.countDocuments(), 
+      Product.countDocuments()
+    ])
+
+    // Calculate total revenue safely
+    const revenueResult = await Order.aggregate([
+      { $match: { status: 'DELIVERED' } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+    ]).catch(() => [])
+
+    const totalRevenue = revenueResult[0]?.total || 0
+
+    return {
+      users: userCount.status === 'fulfilled' ? userCount.value : 0,
+      orders: orderCount.status === 'fulfilled' ? orderCount.value : 0,
+      products: productCount.status === 'fulfilled' ? productCount.value : 0,
+      revenue: totalRevenue,
+      status: 'connected'
+    }
+  } catch (error) {
+    return {
+      users: 0,
+      orders: 0, 
+      products: 0,
+      revenue: 0,
+      status: 'error',
+      error: error.message
+    }
+  }
+}
+
+export default async function AdminDashboardPage() {
+  const stats = await getSimpleStats()
+
+  const cardStyle = {
+    backgroundColor: 'white',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    padding: '20px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+  }
+
+  const headerStyle = {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#6b7280',
+    marginBottom: '8px'
+  }
+
+  const valueStyle = {
+    fontSize: '32px',
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: '4px'
+  }
+
+  const subTextStyle = {
+    fontSize: '12px',
+    color: '#9ca3af'
+  }
+
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h1 style={{ color: 'red', fontSize: '24px', marginBottom: '20px' }}>
-        🔧 DASHBOARD DEBUG MODE
-      </h1>
-      
-      <div style={{ 
-        backgroundColor: '#fff3cd', 
-        border: '1px solid #ffeaa7', 
-        padding: '15px', 
-        marginBottom: '20px',
-        borderRadius: '5px'
-      }}>
-        <h2 style={{ margin: '0 0 10px 0', color: '#856404' }}>Status Check</h2>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>✅ Page is rendering</p>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>✅ Layout is working</p>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>✅ Basic HTML/CSS is functional</p>
-      </div>
-
-      <div style={{ 
-        backgroundColor: '#d1ecf1', 
-        border: '1px solid #bee5eb', 
-        padding: '15px', 
-        marginBottom: '20px',
-        borderRadius: '5px'
-      }}>
-        <h2 style={{ margin: '0 0 10px 0', color: '#0c5460' }}>Test Information</h2>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>
-          <strong>Environment:</strong> Production
-        </p>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>
-          <strong>URL:</strong> /admin/dashboard
-        </p>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>
-          <strong>Time:</strong> {new Date().toISOString()}
+    <div style={{ padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '32px' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', marginBottom: '8px' }}>
+          Dashboard
+        </h1>
+        <p style={{ color: '#6b7280', fontSize: '16px' }}>
+          Welcome back! Here's what's happening with your store.
         </p>
       </div>
 
+      {/* Status Indicator */}
       <div style={{ 
-        backgroundColor: '#f8d7da', 
-        border: '1px solid #f5c6cb', 
-        padding: '15px', 
-        marginBottom: '20px',
-        borderRadius: '5px'
+        ...cardStyle, 
+        backgroundColor: stats.status === 'connected' ? '#ecfdf5' : '#fef2f2',
+        borderColor: stats.status === 'connected' ? '#10b981' : '#ef4444',
+        marginBottom: '24px'
       }}>
-        <h2 style={{ margin: '0 0 10px 0', color: '#721c24' }}>Previous Issues</h2>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>❌ Complex components were failing</p>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>❌ Analytics functions causing crashes</p>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>❌ Database/Auth calls failing silently</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ 
+            width: '8px', 
+            height: '8px', 
+            borderRadius: '50%', 
+            backgroundColor: stats.status === 'connected' ? '#10b981' : '#ef4444' 
+          }}></span>
+          <span style={{ 
+            fontSize: '14px', 
+            fontWeight: '500',
+            color: stats.status === 'connected' ? '#065f46' : '#991b1b'
+          }}>
+            Database: {stats.status === 'connected' ? 'Connected' : 'Error'}
+          </span>
+          {stats.error && (
+            <span style={{ fontSize: '12px', color: '#991b1b', marginLeft: '8px' }}>
+              ({stats.error})
+            </span>
+          )}
+        </div>
       </div>
 
+      {/* Metrics Grid */}
       <div style={{ 
-        backgroundColor: '#d4edda', 
-        border: '1px solid #c3e6cb', 
-        padding: '15px', 
-        marginBottom: '20px',
-        borderRadius: '5px'
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+        gap: '24px',
+        marginBottom: '32px'
       }}>
-        <h2 style={{ margin: '0 0 10px 0', color: '#155724' }}>Next Steps</h2>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>1. If you can see this page → React rendering works</p>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>2. Check browser console for any JavaScript errors</p>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>3. If no console errors → Issue is with complex components</p>
-        <p style={{ margin: '5px 0', fontSize: '14px' }}>4. Send screenshot of this page + console to confirm</p>
+        {/* Total Revenue */}
+        <div style={cardStyle}>
+          <div style={headerStyle}>💰 Total Revenue</div>
+          <div style={valueStyle}>₹{stats.revenue.toLocaleString('en-IN')}</div>
+          <div style={subTextStyle}>From delivered orders</div>
+        </div>
+
+        {/* Total Orders */}
+        <div style={cardStyle}>
+          <div style={headerStyle}>📦 Total Orders</div>
+          <div style={valueStyle}>{stats.orders.toLocaleString()}</div>
+          <div style={subTextStyle}>All time orders</div>
+        </div>
+
+        {/* Total Users */}
+        <div style={cardStyle}>
+          <div style={headerStyle}>👥 Total Users</div>
+          <div style={valueStyle}>{stats.users.toLocaleString()}</div>
+          <div style={subTextStyle}>Registered customers</div>
+        </div>
+
+        {/* Total Products */}
+        <div style={cardStyle}>
+          <div style={headerStyle}>🛍️ Total Products</div>
+          <div style={valueStyle}>{stats.products.toLocaleString()}</div>
+          <div style={subTextStyle}>In your catalog</div>
+        </div>
       </div>
 
-      <div style={{ marginTop: '40px' }}>
-        <h2 style={{ color: '#333', marginBottom: '10px' }}>Quick Navigation Test</h2>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+      {/* Quick Actions */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '16px' }}>
+          Quick Actions
+        </h2>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <a href="/admin/products" style={{ 
-            padding: '8px 16px', 
-            backgroundColor: '#007bff', 
+            padding: '10px 16px', 
+            backgroundColor: '#3b82f6', 
             color: 'white', 
             textDecoration: 'none',
-            borderRadius: '4px',
-            fontSize: '14px'
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: '500'
           }}>
-            Products
+            📦 Manage Products
           </a>
           <a href="/admin/orders" style={{ 
-            padding: '8px 16px', 
-            backgroundColor: '#28a745', 
+            padding: '10px 16px', 
+            backgroundColor: '#10b981', 
             color: 'white', 
             textDecoration: 'none',
-            borderRadius: '4px',
-            fontSize: '14px'
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: '500'
           }}>
-            Orders
+            📋 View Orders
           </a>
           <a href="/admin/customers" style={{ 
-            padding: '8px 16px', 
-            backgroundColor: '#dc3545', 
+            padding: '10px 16px', 
+            backgroundColor: '#8b5cf6', 
             color: 'white', 
             textDecoration: 'none',
-            borderRadius: '4px',
-            fontSize: '14px'
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: '500'
           }}>
-            Customers
+            👥 Manage Customers
+          </a>
+          <a href="/admin/analytics" style={{ 
+            padding: '10px 16px', 
+            backgroundColor: '#f59e0b', 
+            color: 'white', 
+            textDecoration: 'none',
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: '500'
+          }}>
+            📊 View Analytics
           </a>
         </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ marginTop: '32px', textAlign: 'center' }}>
+        <p style={{ fontSize: '12px', color: '#9ca3af' }}>
+          Last updated: {new Date().toLocaleString('en-IN')}
+        </p>
       </div>
     </div>
   )
