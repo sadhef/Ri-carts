@@ -9,6 +9,9 @@ import { ProductRelated } from '@/components/products/product-related'
 import { serializeProduct, serializeCategory } from '@/lib/serialize'
 import mongoose from 'mongoose'
 
+// Force dynamic rendering for pages that use auth()
+export const dynamic = 'force-dynamic'
+
 type tParams = Promise<{ id: string }>
 
 interface ProductPageProps {

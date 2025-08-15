@@ -5,6 +5,9 @@ import { formatPrice } from '@/lib/utils'
 import { CheckCircle } from 'lucide-react'
 import { IOrder, IOrderItem, IProduct, IAddress } from '@/lib/models'
 
+// Force dynamic rendering for pages that use auth()
+export const dynamic = 'force-dynamic'
+
 type OrderParams = Promise<{ id: string }>
 
 interface PageProps {

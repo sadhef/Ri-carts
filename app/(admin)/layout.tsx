@@ -3,6 +3,9 @@ import { auth } from '@/auth'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { AdminHeader } from '@/components/admin/admin-header'
 
+// Force dynamic rendering for admin pages that use auth()
+export const dynamic = 'force-dynamic'
+
 export default async function AdminLayout({
   children,
 }: {

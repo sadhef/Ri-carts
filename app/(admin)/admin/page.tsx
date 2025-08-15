@@ -4,6 +4,9 @@ import { RecentOrders } from '@/components/admin/recent-orders'
 import { OrderStats } from '@/components/admin/order-stats'
 import { getOrderStats, getRevenueData, getRecentOrders } from '@/lib/analytics'
 
+// Force dynamic rendering for admin pages that use auth()
+export const dynamic = 'force-dynamic'
+
 export default async function AdminDashboardPage() {
   // Fetch analytics data
   const [orderStatsData, revenueData, recentOrders] = await Promise.all([

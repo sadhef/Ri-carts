@@ -7,6 +7,9 @@ import { SessionProvider } from '@/components/providers/session-provider'
 import { CartProvider } from '@/components/providers/cart-provider'
 import { ApolloProviderWrapper } from '@/components/providers/apollo-provider'
 
+// Force dynamic rendering for pages that use auth()
+export const dynamic = 'force-dynamic'
+
 const geistSans = Geist({
   variable: '--font-geist-sans',
   subsets: ['latin'],
