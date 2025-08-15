@@ -27,13 +27,6 @@
       ]
     }
   ],
-  "redirects": [
-    {
-      "source": "/admin",
-      "destination": "/admin/dashboard",
-      "permanent": false
-    }
-  ],
   "env": {
     "NODE_ENV": "production"
   }
