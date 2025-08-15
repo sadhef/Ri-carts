@@ -114,10 +114,32 @@ async function getMetrics() {
 }
 
 export async function MetricsCards() {
-  const metrics = await getMetrics()
+  let metrics
+  
+  try {
+    metrics = await getMetrics()
+  } catch (error) {
+    console.error('MetricsCards error:', error)
+    // Return default metrics if there's an error
+    metrics = {
+      totalRevenue: 0,
+      revenueChange: 0,
+      totalOrders: 0,
+      newOrders: 0,
+      totalCustomers: 0,
+      customerChange: 0,
+      averageOrderValue: 0,
+      aovChange: 0,
+    }
+  }
 
   if (!metrics) {
-    return <div>Failed to load metrics</div>
+    return (
+      <div className="text-center p-8">
+        <p className="text-red-600">Failed to load metrics</p>
+        <p className="text-sm text-gray-500 mt-2">Please check your database connection</p>
+      </div>
+    )
   }
 
   return (
