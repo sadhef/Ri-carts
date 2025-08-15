@@ -1,114 +1,56 @@
-import { Suspense } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
-import { DollarSign, ShoppingCart, Users, TrendingUp } from 'lucide-react'
-import { MetricsCards } from '@/components/admin/metrics-cards'
-import { RevenueChart } from '@/components/admin/revenue-chart'
-import { RecentOrders } from '@/components/admin/recent-orders'
-import { OrderStats } from '@/components/admin/order-stats'
-import { getOrderStats, getRevenueData, getRecentOrders } from '@/lib/analytics'
+import { DollarSign, ShoppingCart, Users, TrendingUp, AlertCircle } from 'lucide-react'
+import { auth } from '@/auth'
+import connectToDatabase from '@/lib/mongodb'
+import { Order, User } from '@/lib/models'
 
 // Force dynamic rendering for admin pages that use auth()
 export const dynamic = 'force-dynamic'
 
-async function DashboardContent() {
-  let orderStatsData = []
-  let revenueData = []
-  let recentOrders = []
-
-  try {
-    // Fetch analytics data with individual error handling
-    const results = await Promise.allSettled([
-      getOrderStats(),
-      getRevenueData(),
-      getRecentOrders()
-    ])
-
-    orderStatsData = results[0].status === 'fulfilled' ? results[0].value : []
-    revenueData = results[1].status === 'fulfilled' ? results[1].value : []
-    recentOrders = results[2].status === 'fulfilled' ? results[2].value : []
-  } catch (error) {
-    console.error('Dashboard data fetch error:', error)
+async function getDashboardData() {
+  const diagnostics = {
+    authWorking: false,
+    dbConnected: false,
+    userCount: 0,
+    orderCount: 0,
+    errors: [] as string[]
   }
 
-  return (
-    <>
-      {/* Metrics Cards */}
-      <Suspense fallback={<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{Array.from({length: 4}).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>}>
-        <MetricsCards />
-      </Suspense>
+  try {
+    // Test auth
+    const session = await auth()
+    if (session?.user) {
+      diagnostics.authWorking = true
+    } else {
+      diagnostics.errors.push('Auth session not found')
+    }
+  } catch (error) {
+    diagnostics.errors.push(`Auth error: ${error}`)
+  }
 
-      {/* Charts Section */}
-      <div className="grid gap-8 lg:grid-cols-7">
-        {/* Revenue Chart */}
-        <Card className="lg:col-span-4">
-          <CardHeader>
-            <CardTitle>Revenue</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<Skeleton className="h-48 w-full" />}>
-              {revenueData && revenueData.length > 0 ? (
-                <RevenueChart data={revenueData} />
-              ) : (
-                <div className="h-48 flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No revenue data available</p>
-                    <p className="text-sm">Start making sales to see revenue trends</p>
-                  </div>
-                </div>
-              )}
-            </Suspense>
-          </CardContent>
-        </Card>
+  try {
+    // Test database connection
+    await connectToDatabase()
+    diagnostics.dbConnected = true
 
-        {/* Order Status Chart */}
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Order Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<Skeleton className="h-48 w-full" />}>
-              {orderStatsData && orderStatsData.length > 0 ? (
-                <OrderStats data={orderStatsData} />
-              ) : (
-                <div className="h-48 flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <ShoppingCart className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No order data available</p>
-                    <p className="text-sm">Orders will appear here</p>
-                  </div>
-                </div>
-              )}
-            </Suspense>
-          </CardContent>
-        </Card>
-      </div>
+    // Test basic queries
+    const [userCount, orderCount] = await Promise.all([
+      User.countDocuments().catch(() => 0),
+      Order.countDocuments().catch(() => 0)
+    ])
+    
+    diagnostics.userCount = userCount
+    diagnostics.orderCount = orderCount
+  } catch (error) {
+    diagnostics.errors.push(`Database error: ${error}`)
+  }
 
-      {/* Recent Orders */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Orders</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<Skeleton className="h-32 w-full" />}>
-            {recentOrders && recentOrders.length > 0 ? (
-              <RecentOrders orders={recentOrders} />
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <ShoppingCart className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No recent orders found</p>
-                <p className="text-sm">New orders will appear here</p>
-              </div>
-            )}
-          </Suspense>
-        </CardContent>
-      </Card>
-    </>
-  )
+  return diagnostics
 }
 
-export default function AdminDashboardPage() {
+export default async function AdminDashboardPage() {
+  const diagnostics = await getDashboardData()
+
   return (
     <div className="space-y-8">
       {/* Header Section */}
@@ -121,41 +63,122 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Dashboard Content with Real Data */}
-      <Suspense fallback={
-        <div className="space-y-8">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {Array.from({length: 4}).map((_, i) => <Skeleton key={i} className="h-24" />)}
-          </div>
-          <Skeleton className="h-64" />
-          <Skeleton className="h-48" />
-        </div>
-      }>
-        <DashboardContent />
-      </Suspense>
-
-      {/* Getting Started Section */}
-      <Card>
+      {/* Diagnostic Information */}
+      <Card className="border-orange-200 bg-orange-50">
         <CardHeader>
-          <CardTitle>Getting Started</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-orange-600" />
+            System Diagnostics
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <div className="p-4 border rounded-lg">
-              <h3 className="font-semibold mb-2">Add Products</h3>
-              <p className="text-sm text-muted-foreground mb-3">Start by adding products to your store</p>
-              <a href="/admin/products" className="text-sm text-blue-600 hover:underline">Go to Products →</a>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="font-semibold mb-2">System Status</h3>
+              <ul className="space-y-1 text-sm">
+                <li className={`flex items-center gap-2 ${diagnostics.authWorking ? 'text-green-600' : 'text-red-600'}`}>
+                  <span className={`w-2 h-2 rounded-full ${diagnostics.authWorking ? 'bg-green-600' : 'bg-red-600'}`}></span>
+                  Authentication: {diagnostics.authWorking ? 'Working' : 'Failed'}
+                </li>
+                <li className={`flex items-center gap-2 ${diagnostics.dbConnected ? 'text-green-600' : 'text-red-600'}`}>
+                  <span className={`w-2 h-2 rounded-full ${diagnostics.dbConnected ? 'bg-green-600' : 'bg-red-600'}`}></span>
+                  Database: {diagnostics.dbConnected ? 'Connected' : 'Failed'}
+                </li>
+              </ul>
             </div>
-            <div className="p-4 border rounded-lg">
-              <h3 className="font-semibold mb-2">Manage Categories</h3>
-              <p className="text-sm text-muted-foreground mb-3">Organize your products with categories</p>
-              <a href="/admin/categories" className="text-sm text-blue-600 hover:underline">Go to Categories →</a>
+            <div>
+              <h3 className="font-semibold mb-2">Data Counts</h3>
+              <ul className="space-y-1 text-sm">
+                <li>Users: {diagnostics.userCount}</li>
+                <li>Orders: {diagnostics.orderCount}</li>
+              </ul>
             </div>
-            <div className="p-4 border rounded-lg">
-              <h3 className="font-semibold mb-2">Store Settings</h3>
-              <p className="text-sm text-muted-foreground mb-3">Configure your store settings</p>
-              <a href="/admin/settings" className="text-sm text-blue-600 hover:underline">Go to Settings →</a>
+          </div>
+          {diagnostics.errors.length > 0 && (
+            <div className="mt-4">
+              <h3 className="font-semibold mb-2 text-red-600">Errors:</h3>
+              <ul className="space-y-1 text-sm text-red-600">
+                {diagnostics.errors.map((error, index) => (
+                  <li key={index}>• {error}</li>
+                ))}
+              </ul>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Basic Metrics Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹0</div>
+            <p className="text-xs text-muted-foreground">
+              {diagnostics.dbConnected ? 'No orders with delivered status' : 'Database connection failed'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{diagnostics.orderCount}</div>
+            <p className="text-xs text-muted-foreground">
+              {diagnostics.dbConnected ? 'Total orders in database' : 'Database connection failed'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{diagnostics.userCount}</div>
+            <p className="text-xs text-muted-foreground">
+              {diagnostics.dbConnected ? 'Total users in database' : 'Database connection failed'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">System Status</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {diagnostics.authWorking && diagnostics.dbConnected ? '✅' : '❌'}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {diagnostics.authWorking && diagnostics.dbConnected ? 'All systems operational' : 'System issues detected'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Temporary Message */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Dashboard Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-blue-600" />
+            <h3 className="text-lg font-semibold mb-2">Diagnostic Mode Active</h3>
+            <p className="text-muted-foreground mb-4">
+              This dashboard is currently in diagnostic mode to identify production issues.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Please check the System Diagnostics section above for detailed information about what&apos;s working and what&apos;s not.
+            </p>
           </div>
         </CardContent>
       </Card>
