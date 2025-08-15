@@ -2,11 +2,13 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { CheckCircle, Package, Mail, ArrowRight, Home } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { GET_ORDER } from '@/lib/graphql/queries'
 
 interface OrderDetails {
   id: string
@@ -21,8 +23,6 @@ interface OrderDetails {
 function SuccessContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null)
-  const [loading, setLoading] = useState(true)
   const orderId = searchParams.get('orderId')
 
   useEffect(() => {
@@ -30,23 +30,17 @@ function SuccessContent() {
       router.push('/')
       return
     }
-
-    const fetchOrderDetails = async () => {
-      try {
-        const response = await fetch(`/api/orders/${orderId}`)
-        if (response.ok) {
-          const data = await response.json()
-          setOrderDetails(data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch order details:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchOrderDetails()
   }, [orderId, router])
+
+  const { data, loading, error } = useQuery(GET_ORDER, {
+    variables: { id: orderId },
+    skip: !orderId,
+    onError: (error) => {
+      console.error('Failed to fetch order details:', error)
+    },
+  })
+
+  const orderDetails = data?.order
 
   if (loading) {
     return (

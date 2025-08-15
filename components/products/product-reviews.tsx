@@ -2,11 +2,13 @@
 
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
+import { useMutation } from '@apollo/client'
 import { Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { formatDistanceToNow } from 'date-fns'
+import { CREATE_REVIEW } from '@/lib/graphql/queries'
 
 interface Review {
   id: string
@@ -29,38 +31,36 @@ export function ProductReviews({ productId, reviews }: ProductReviewsProps) {
   const [rating, setRating] = useState(5)
   const [comment, setComment] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  const [createReview] = useMutation(CREATE_REVIEW, {
+    onCompleted: () => {
+      // Reset form
+      setRating(5)
+      setComment('')
+      setIsSubmitting(false)
+      // TODO: Update reviews list without full page refresh
+    },
+    onError: (error) => {
+      console.error('Error submitting review:', error)
+      setIsSubmitting(false)
+    },
+  })
 
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!session) return
 
     setIsSubmitting(true)
-    try {
-      const response = await fetch('/api/reviews', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+    
+    await createReview({
+      variables: {
+        input: {
           productId,
           rating,
           comment,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to submit review')
-      }
-
-      // Reset form
-      setRating(5)
-      setComment('')
-      // TODO: Update reviews list without full page refresh
-    } catch (error) {
-      console.error('Error submitting review:', error)
-    } finally {
-      setIsSubmitting(false)
-    }
+        },
+      },
+    })
   }
 
   return (

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+// Removed GraphQL imports
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,6 +45,7 @@ import {
   BarChart,
   Bar
 } from 'recharts'
+// Removed GraphQL queries
 
 interface ReportData {
   id: string
@@ -65,76 +67,21 @@ interface SalesReportData {
 }
 
 export default function ReportsPage() {
+  const [selectedType, setSelectedType] = useState('all')
+  const [selectedPeriod, setSelectedPeriod] = useState('30d')
   const [reports, setReports] = useState<ReportData[]>([])
   const [salesData, setSalesData] = useState<SalesReportData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [selectedType, setSelectedType] = useState('all')
-  const [selectedPeriod, setSelectedPeriod] = useState('30d')
-
-  useEffect(() => {
-    fetchReports()
-    fetchSalesData()
-  }, [selectedPeriod])
 
   const fetchReports = async () => {
     try {
-      setLoading(true)
       const response = await fetch('/api/admin/reports')
       if (response.ok) {
         const data = await response.json()
         setReports(data)
-      } else {
-        // Mock data for demonstration
-        setReports([
-          {
-            id: '1',
-            name: 'Monthly Sales Report',
-            type: 'sales',
-            generatedAt: '2025-08-12T10:30:00Z',
-            period: 'August 2025',
-            status: 'ready',
-            downloadUrl: '/reports/monthly-sales-aug-2025.pdf'
-          },
-          {
-            id: '2',
-            name: 'Inventory Report',
-            type: 'inventory',
-            generatedAt: '2025-08-12T09:15:00Z',
-            period: 'Current',
-            status: 'ready',
-            downloadUrl: '/reports/inventory-current.xlsx'
-          },
-          {
-            id: '3',
-            name: 'Customer Analytics',
-            type: 'customer',
-            generatedAt: '2025-08-12T08:45:00Z',
-            period: 'Q3 2025',
-            status: 'ready',
-            downloadUrl: '/reports/customer-analytics-q3-2025.pdf'
-          },
-          {
-            id: '4',
-            name: 'Financial Summary',
-            type: 'financial',
-            generatedAt: '2025-08-12T11:00:00Z',
-            period: 'YTD 2025',
-            status: 'generating',
-          },
-          {
-            id: '5',
-            name: 'Product Performance',
-            type: 'sales',
-            generatedAt: '2025-08-10T16:30:00Z',
-            period: 'Last 90 days',
-            status: 'failed',
-          }
-        ])
       }
     } catch (error) {
       console.error('Error fetching reports:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -144,51 +91,39 @@ export default function ReportsPage() {
       if (response.ok) {
         const data = await response.json()
         setSalesData(data)
-      } else {
-        // Mock data
-        setSalesData({
-          totalRevenue: 125432.50,
-          totalOrders: 456,
-          averageOrderValue: 275.07,
-          growthRate: 18.5,
-          topProducts: [
-            { name: 'Wireless Headphones', sales: 156, revenue: 23400 },
-            { name: 'Smart Watch', sales: 134, revenue: 40200 },
-            { name: 'Laptop Stand', sales: 98, revenue: 9800 },
-            { name: 'Bluetooth Speaker', sales: 87, revenue: 8700 },
-            { name: 'USB Cable', sales: 76, revenue: 1520 }
-          ],
-          salesByMonth: [
-            { month: 'Jan', sales: 65, revenue: 17850 },
-            { month: 'Feb', sales: 78, revenue: 21420 },
-            { month: 'Mar', sales: 90, revenue: 24750 },
-            { month: 'Apr', sales: 81, revenue: 22275 },
-            { month: 'May', sales: 95, revenue: 26125 },
-            { month: 'Jun', sales: 110, revenue: 30250 },
-            { month: 'Jul', sales: 125, revenue: 34375 },
-            { month: 'Aug', sales: 142, revenue: 39050 }
-          ]
-        })
       }
     } catch (error) {
       console.error('Error fetching sales data:', error)
     }
   }
 
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      await Promise.all([fetchReports(), fetchSalesData()])
+      setLoading(false)
+    }
+    fetchData()
+  }, [])
+
+  useEffect(() => {
+    fetchSalesData()
+  }, [selectedPeriod])
+
   const generateReport = async (type: string) => {
     try {
-      const response = await fetch('/api/admin/reports/generate', {
+      const response = await fetch('/api/admin/reports', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ type, period: selectedPeriod }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${type.charAt(0).toUpperCase() + type.slice(1)} Report`,
+          type,
+          period: selectedPeriod
+        })
       })
-
+      
       if (response.ok) {
         fetchReports() // Refresh reports list
-      } else {
-        console.error('Failed to generate report')
       }
     } catch (error) {
       console.error('Error generating report:', error)
@@ -270,7 +205,7 @@ export default function ReportsPage() {
               </div>
               <div className="flex items-center mt-2 text-sm">
                 <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                <span className="text-green-500">+{salesData.growthRate}%</span>
+                <span className="text-green-500">+0%</span>
                 <span className="text-gray-500 ml-1">vs last period</span>
               </div>
             </CardContent>
@@ -305,7 +240,7 @@ export default function ReportsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Growth Rate</p>
-                  <p className="text-2xl font-bold">+{salesData.growthRate}%</p>
+                  <p className="text-2xl font-bold">+0%</p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-orange-600" />
               </div>

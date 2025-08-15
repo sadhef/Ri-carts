@@ -1,4 +1,7 @@
-import { Suspense } from 'react'
+'use client'
+
+import { useState } from 'react'
+import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { Plus, Search, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,41 +17,72 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import connectToDatabase from '@/lib/mongodb'
-import { Product, Category, ProductStatus } from '@/lib/models'
+import { ProductStatus } from '@/types'
 import { formatCurrency } from '@/lib/utils'
-import { serializeProduct, serializeCategory } from '@/lib/serialize'
 import { ProductActions } from '@/components/admin/product-actions'
+import { GET_PRODUCTS } from '@/lib/graphql/queries'
 
-async function getProducts() {
-  try {
-    await connectToDatabase()
-    
-    const products = await Product.find()
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .lean()
+export default function ProductsPage() {
+  const [searchTerm, setSearchTerm] = useState('')
 
-    // Get categories for each product and properly serialize data
-    const productsWithCategory = await Promise.all(
-      products.map(async (product) => {
-        const category = await Category.findById(product.categoryId).lean()
-        return {
-          ...serializeProduct(product),
-          category: category ? serializeCategory(category) : null
-        }
-      })
-    )
+  const { data, loading, error, refetch } = useQuery(GET_PRODUCTS, {
+    variables: {
+      page: 1,
+      perPage: 50,
+      filters: searchTerm ? { search: searchTerm } : null,
+      sort: { field: 'createdAt' as const, order: 'DESC' as const }
+    },
+    errorPolicy: 'all'
+  })
 
-    return productsWithCategory
-  } catch (error) {
-    console.error('Error fetching products:', error)
-    return []
+  // Refetch when search term changes
+  const handleSearch = (value: string) => {
+    setSearchTerm(value)
+    refetch({
+      page: 1,
+      perPage: 50,
+      filters: value ? { search: value } : null,
+      sort: { field: 'createdAt' as const, order: 'DESC' as const }
+    })
   }
-}
 
-export default async function ProductsPage() {
-  const products = await getProducts()
+  const products = data?.products?.products || []
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Products</h1>
+            <p className="text-gray-600">Manage your product catalog</p>
+          </div>
+          <Link href="/admin/products/new">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Product
+            </Button>
+          </Link>
+        </div>
+        <ProductsTableSkeleton />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Products</h1>
+            <p className="text-gray-600">Manage your product catalog</p>
+          </div>
+        </div>
+        <div className="text-center py-8 text-gray-500">
+          Failed to load products.
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -68,7 +102,12 @@ export default async function ProductsPage() {
       <div className="flex items-center space-x-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input placeholder="Search products..." className="pl-9" />
+          <Input 
+            placeholder="Search products..." 
+            className="pl-9" 
+            value={searchTerm}
+            onChange={(e) => handleSearch(e.target.value)}
+          />
         </div>
         <Button variant="outline">
           <Filter className="mr-2 h-4 w-4" />
@@ -81,7 +120,6 @@ export default async function ProductsPage() {
           <CardTitle>Product List</CardTitle>
         </CardHeader>
         <CardContent>
-          <Suspense fallback={<ProductsTableSkeleton />}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -156,7 +194,6 @@ export default async function ProductsPage() {
                 ))}
               </TableBody>
             </Table>
-          </Suspense>
         </CardContent>
       </Card>
     </div>

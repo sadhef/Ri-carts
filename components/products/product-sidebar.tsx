@@ -1,7 +1,9 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@apollo/client'
+import { GET_CATEGORIES } from '@/lib/graphql/queries'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -19,7 +21,6 @@ interface Category {
 export function ProductSidebar() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState(
     searchParams.get('category') || 'all'
   )
@@ -27,19 +28,8 @@ export function ProductSidebar() {
     searchParams.get('sort') || 'default'
   )
 
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await fetch('/api/categories')
-        const data = await response.json()
-        setCategories(data)
-      } catch (error) {
-        console.error('Error fetching categories:', error)
-      }
-    }
-
-    fetchCategories()
-  }, [])
+  const { data, loading, error } = useQuery(GET_CATEGORIES)
+  const categories = data?.categories || []
 
   const handleFilter = () => {
     const params = new URLSearchParams()

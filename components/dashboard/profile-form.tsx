@@ -2,10 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@apollo/client'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import * as z from 'zod'
 import { User } from '@/types'
+import { UPDATE_USER } from '@/lib/graphql/queries'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -43,6 +45,26 @@ export function ProfileForm({ user }: ProfileFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
+  
+  const [updateUser] = useMutation(UPDATE_USER, {
+    onCompleted: () => {
+      setIsLoading(false)
+      toast({
+        title: 'Profile updated',
+        description: 'Your profile has been updated successfully.',
+      })
+      router.refresh()
+    },
+    onError: (error) => {
+      console.error(error)
+      setIsLoading(false)
+      toast({
+        title: 'Error',
+        description: 'Something went wrong. Please try again.',
+        variant: 'destructive',
+      })
+    },
+  })
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -55,35 +77,12 @@ export function ProfileForm({ user }: ProfileFormProps) {
   async function onSubmit(data: ProfileFormValues) {
     setIsLoading(true)
 
-    try {
-      const response = await fetch('/api/user', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update profile')
-      }
-
-      toast({
-        title: 'Profile updated',
-        description: 'Your profile has been updated successfully.',
-      })
-
-      router.refresh()
-    } catch (error) {
-      console.error(error)
-      toast({
-        title: 'Error',
-        description: 'Something went wrong. Please try again.',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
-    }
+    await updateUser({
+      variables: {
+        id: user?.id,
+        input: data,
+      },
+    })
   }
 
   return (

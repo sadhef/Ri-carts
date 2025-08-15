@@ -116,18 +116,6 @@ export interface IProduct extends Document {
   updatedAt: Date
 }
 
-export interface IAddress extends Document {
-  _id: string
-  userId: string
-  street: string
-  city: string
-  state: string
-  postalCode: string
-  country: string
-  isDefault: boolean
-  createdAt: Date
-  updatedAt: Date
-}
 
 export interface IOrder extends Document {
   _id: string
@@ -249,22 +237,6 @@ export interface INewsletterSubscription extends Document {
   tags: string[]
 }
 
-export interface IAddress extends Document {
-  _id: string
-  userId: string
-  type: 'HOME' | 'WORK' | 'OTHER'
-  isDefault: boolean
-  firstName: string
-  lastName: string
-  address: string
-  city: string
-  state: string
-  zipCode: string
-  country: string
-  phone?: string
-  createdAt: Date
-  updatedAt: Date
-}
 
 export interface IProductView extends Document {
   _id: string
@@ -462,21 +434,6 @@ const productSchema = new Schema<IProduct>({
   timestamps: true
 })
 
-const addressSchema = new Schema<IAddress>({
-  userId: { type: String, required: true },
-  type: { type: String, enum: ['HOME', 'WORK', 'OTHER'], default: 'HOME' },
-  isDefault: { type: Boolean, default: false },
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  address: { type: String, required: true },
-  city: { type: String, required: true },
-  state: { type: String, required: true },
-  zipCode: { type: String, required: true },
-  country: { type: String, required: true },
-  phone: { type: String }
-}, {
-  timestamps: true
-})
 
 const orderSchema = new Schema<IOrder>({
   userId: { type: String, required: true },
@@ -695,24 +652,23 @@ const storeSettingsSchema = new Schema<IStoreSettings>({
   timestamps: true
 })
 
-export const User = mongoose.models.User || mongoose.model<IUser>('User', userSchema)
-export const Account = mongoose.models.Account || mongoose.model<IAccount>('Account', accountSchema)
-export const Session = mongoose.models.Session || mongoose.model<ISession>('Session', sessionSchema)
-export const Category = mongoose.models.Category || mongoose.model<ICategory>('Category', categorySchema)
-export const Product = mongoose.models.Product || mongoose.model<IProduct>('Product', productSchema)
-export const Address = mongoose.models.Address || mongoose.model<IAddress>('Address', addressSchema)
-export const Order = mongoose.models.Order || mongoose.model<IOrder>('Order', orderSchema)
-export const OrderItem = mongoose.models.OrderItem || mongoose.model<IOrderItem>('OrderItem', orderItemSchema)
-export const Review = mongoose.models.Review || mongoose.model<IReview>('Review', reviewSchema)
-export const Cart = mongoose.models.Cart || mongoose.model<ICart>('Cart', cartSchema)
-export const CartItem = mongoose.models.CartItem || mongoose.model<ICartItem>('CartItem', cartItemSchema)
-export const Coupon = mongoose.models.Coupon || mongoose.model<ICoupon>('Coupon', couponSchema)
-export const Wishlist = mongoose.models.Wishlist || mongoose.model<IWishlist>('Wishlist', wishlistSchema)
-export const NewsletterSubscription = mongoose.models.NewsletterSubscription || mongoose.model<INewsletterSubscription>('NewsletterSubscription', newsletterSubscriptionSchema)
-export const ProductView = mongoose.models.ProductView || mongoose.model<IProductView>('ProductView', productViewSchema)
-export const Setting = mongoose.models.Setting || mongoose.model<ISetting>('Setting', settingSchema)
-export const Report = mongoose.models.Report || mongoose.model<IReport>('Report', reportSchema)
-export const NewsletterCampaign = mongoose.models.NewsletterCampaign || mongoose.model<INewsletterCampaign>('NewsletterCampaign', newsletterCampaignSchema)
-export const ShippingZone = mongoose.models.ShippingZone || mongoose.model<IShippingZone>('ShippingZone', shippingZoneSchema)
-export const ShippingRate = mongoose.models.ShippingRate || mongoose.model<IShippingRate>('ShippingRate', shippingRateSchema)
-export const StoreSettings = mongoose.models.StoreSettings || mongoose.model<IStoreSettings>('StoreSettings', storeSettingsSchema)
+export const User = mongoose.models?.User || mongoose.model<IUser>('User', userSchema)
+export const Account = mongoose.models?.Account || mongoose.model<IAccount>('Account', accountSchema)
+export const Session = mongoose.models?.Session || mongoose.model<ISession>('Session', sessionSchema)
+export const Category = mongoose.models?.Category || mongoose.model<ICategory>('Category', categorySchema)
+export const Product = mongoose.models?.Product || mongoose.model<IProduct>('Product', productSchema)
+export const Order = mongoose.models?.Order || mongoose.model<IOrder>('Order', orderSchema)
+export const OrderItem = mongoose.models?.OrderItem || mongoose.model<IOrderItem>('OrderItem', orderItemSchema)
+export const Review = mongoose.models?.Review || mongoose.model<IReview>('Review', reviewSchema)
+export const Cart = mongoose.models?.Cart || mongoose.model<ICart>('Cart', cartSchema)
+export const CartItem = mongoose.models?.CartItem || mongoose.model<ICartItem>('CartItem', cartItemSchema)
+export const Coupon = mongoose.models?.Coupon || mongoose.model<ICoupon>('Coupon', couponSchema)
+export const Wishlist = mongoose.models?.Wishlist || mongoose.model<IWishlist>('Wishlist', wishlistSchema)
+export const NewsletterSubscription = mongoose.models?.NewsletterSubscription || mongoose.model<INewsletterSubscription>('NewsletterSubscription', newsletterSubscriptionSchema)
+export const ProductView = mongoose.models?.ProductView || mongoose.model<IProductView>('ProductView', productViewSchema)
+export const Setting = mongoose.models?.Setting || mongoose.model<ISetting>('Setting', settingSchema)
+export const Report = mongoose.models?.Report || mongoose.model<IReport>('Report', reportSchema)
+export const NewsletterCampaign = mongoose.models?.NewsletterCampaign || mongoose.model<INewsletterCampaign>('NewsletterCampaign', newsletterCampaignSchema)
+export const ShippingZone = mongoose.models?.ShippingZone || mongoose.model<IShippingZone>('ShippingZone', shippingZoneSchema)
+export const ShippingRate = mongoose.models?.ShippingRate || mongoose.model<IShippingRate>('ShippingRate', shippingRateSchema)
+export const StoreSettings = mongoose.models?.StoreSettings || mongoose.model<IStoreSettings>('StoreSettings', storeSettingsSchema)

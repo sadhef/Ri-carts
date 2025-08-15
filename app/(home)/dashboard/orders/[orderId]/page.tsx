@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useQuery } from '@apollo/client'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowLeft, Package, Truck, CheckCircle, Clock, XCircle, MapPin, CreditCard, Star } from 'lucide-react'
@@ -10,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { format } from 'date-fns'
+import { GET_ORDER } from '@/lib/graphql/queries'
 
 interface OrderDetails {
   id: string
@@ -77,33 +79,19 @@ const statusSteps = [
 export default function OrderDetailsPage() {
   const params = useParams()
   const router = useRouter()
-  const [order, setOrder] = useState<OrderDetails | null>(null)
-  const [loading, setLoading] = useState(true)
 
   const orderId = params.orderId as string
 
-  useEffect(() => {
-    const fetchOrder = async () => {
-      try {
-        const response = await fetch(`/api/orders/${orderId}`)
-        if (response.ok) {
-          const data = await response.json()
-          setOrder(data)
-        } else if (response.status === 404) {
-          router.push('/dashboard/orders')
-        }
-      } catch (error) {
-        console.error('Failed to fetch order:', error)
-        router.push('/dashboard/orders')
-      } finally {
-        setLoading(false)
-      }
-    }
+  const { data, loading, error } = useQuery(GET_ORDER, {
+    variables: { id: orderId },
+    skip: !orderId,
+    onError: (error) => {
+      console.error('Failed to fetch order:', error)
+      router.push('/dashboard/orders')
+    },
+  })
 
-    if (orderId) {
-      fetchOrder()
-    }
-  }, [orderId, router])
+  const order = data?.order
 
   if (loading) {
     return (
@@ -232,12 +220,18 @@ export default function OrderDetailsPage() {
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <Link
-                        href={`/products/${item.productId}`}
-                        className="font-medium truncate hover:text-blue-600"
-                      >
-                        {item.name}
-                      </Link>
+                      {item.productId.startsWith('cart_') ? (
+                        <span className="font-medium truncate text-gray-600">
+                          {item.name}
+                        </span>
+                      ) : (
+                        <Link
+                          href={`/products/${item.productId}`}
+                          className="font-medium truncate hover:text-blue-600"
+                        >
+                          {item.name}
+                        </Link>
+                      )}
                       <p className="text-sm text-gray-600">SKU: {item.sku}</p>
                       <div className="flex items-center mt-1 space-x-2">
                         <span className="font-semibold">${item.price.toFixed(2)}</span>
@@ -251,7 +245,7 @@ export default function OrderDetailsPage() {
                     <div className="text-right">
                       <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
                       <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
-                      {(order.status === 'DELIVERED' || order.status === 'SHIPPED') && (
+                      {(order.status === 'DELIVERED' || order.status === 'SHIPPED') && !item.productId.startsWith('cart_') && (
                         <Link href={`/products/${item.productId}#reviews`}>
                           <Button size="sm" variant="outline" className="mt-2">
                             <Star className="w-3 h-3 mr-1" />

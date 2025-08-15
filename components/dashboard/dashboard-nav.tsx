@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { PackageSearch, User2, MapPin } from 'lucide-react'
+import { PackageSearch, User2 } from 'lucide-react'
 
 const routes = [
   {
@@ -17,12 +17,6 @@ const routes = [
     icon: User2,
     href: '/dashboard/profile',
     color: 'text-violet-500',
-  },
-  {
-    label: 'Addresses',
-    icon: MapPin,
-    href: '/dashboard/addresses',
-    color: 'text-pink-700',
   },
 ]
 

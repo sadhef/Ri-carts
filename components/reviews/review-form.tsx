@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useMutation } from '@apollo/client'
 import { Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -8,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
+import { CREATE_REVIEW } from '@/lib/graphql/queries'
 
 interface ReviewFormProps {
   productId: string
@@ -27,7 +29,9 @@ export function ReviewForm({
   const [rating, setRating] = useState(0)
   const [hoveredRating, setHoveredRating] = useState(0)
   const [comment, setComment] = useState('')
-  const [loading, setLoading] = useState(false)
+  
+  // GraphQL mutation
+  const [createReview, { loading }] = useMutation(CREATE_REVIEW)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,35 +41,24 @@ export function ReviewForm({
       return
     }
 
-    setLoading(true)
     try {
-      const response = await fetch('/api/reviews', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          productId,
-          rating,
-          comment: comment.trim(),
-          orderId
-        })
+      await createReview({
+        variables: {
+          input: {
+            productId,
+            rating,
+            comment: comment.trim() || undefined,
+            orderId
+          }
+        }
       })
-
-      if (response.ok) {
-        toast.success('Review submitted successfully!')
-        setRating(0)
-        setComment('')
-        onReviewSubmitted()
-      } else {
-        const data = await response.json()
-        toast.error(data.error || 'Failed to submit review')
-      }
+      toast.success('Review submitted successfully!')
+      setRating(0)
+      setComment('')
+      onReviewSubmitted()
     } catch (error) {
       console.error('Error submitting review:', error)
       toast.error('Failed to submit review')
-    } finally {
-      setLoading(false)
     }
   }
 

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ import {
   ArrowLeft
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { GET_CURRENT_USER, UPDATE_USER_PROFILE } from '@/lib/graphql/queries'
 
 interface UserProfile {
   name: string
@@ -38,34 +40,33 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const { data: session } = useSession()
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState<Partial<UserProfile>>({})
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    fetchProfile()
-  }, [])
-
-  const fetchProfile = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/user/profile')
-      if (response.ok) {
-        const data = await response.json()
-        setProfile(data)
-        setFormData(data)
-      } else {
-        toast.error('Failed to load profile')
+  const { data, loading, error, refetch } = useQuery(GET_CURRENT_USER, {
+    skip: !session?.user,
+    errorPolicy: 'all',
+    onCompleted: (data) => {
+      if (data?.currentUser) {
+        setFormData(data.currentUser)
       }
-    } catch (error) {
-      console.error('Error fetching profile:', error)
-      toast.error('Failed to load profile')
-    } finally {
-      setLoading(false)
     }
-  }
+  })
+
+  const [updateUser] = useMutation(UPDATE_USER_PROFILE, {
+    onCompleted: () => {
+      refetch()
+      setEditing(false)
+      toast.success('Profile updated successfully!')
+    },
+    onError: (error) => {
+      console.error('Error updating profile:', error)
+      toast.error('Failed to update profile')
+    }
+  })
+
+  const profile = data?.currentUser
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -75,27 +76,27 @@ export default function ProfilePage() {
   }
 
   const handleSave = async () => {
+    if (!session?.user?.id) return
+    
     try {
       setSaving(true)
-      const response = await fetch('/api/user/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+      await updateUser({
+        variables: {
+          id: session.user.id,
+          input: {
+            name: formData.name,
+            phone: formData.phone,
+            address: formData.address,
+            city: formData.city,
+            state: formData.state,
+            zipCode: formData.zipCode,
+            country: formData.country,
+            dateOfBirth: formData.dateOfBirth,
+          }
+        }
       })
-
-      if (response.ok) {
-        const updatedProfile = await response.json()
-        setProfile(updatedProfile)
-        setEditing(false)
-        toast.success('Profile updated successfully!')
-      } else {
-        toast.error('Failed to update profile')
-      }
     } catch (error) {
-      console.error('Error updating profile:', error)
-      toast.error('Failed to update profile')
+      // Error handled in mutation onError
     } finally {
       setSaving(false)
     }

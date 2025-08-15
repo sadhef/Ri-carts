@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Star, Search, MoreHorizontal, Eye, Trash2, CheckCircle, ShieldCheck, AlertCircle } from 'lucide-react'
@@ -29,18 +30,25 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { GET_REVIEWS, DELETE_REVIEW, UPDATE_REVIEW } from '@/lib/graphql/queries'
 import { cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
 interface Review {
   id: string
   productId: string
-  productName: string
-  productSlug: string
-  productImage: string
+  product: {
+    id: string
+    name: string
+    slug: string
+  }
   userId: string
-  userName: string
-  userEmail: string
+  user: {
+    id: string
+    name: string
+    email: string
+    image?: string
+  }
   rating: number
   comment: string
   isVerified: boolean
@@ -56,143 +64,94 @@ interface ReviewStats {
 }
 
 export default function AdminReviewsPage() {
-  const [reviews, setReviews] = useState<Review[]>([])
-  const [stats, setStats] = useState<ReviewStats>({ total: 0, verified: 0, average: 0, recent: 0 })
-  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [ratingFilter, setRatingFilter] = useState('all')
   const [selectedReview, setSelectedReview] = useState<Review | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
 
+  const { data, loading, error, refetch } = useQuery(GET_REVIEWS, {
+    variables: {
+      page: 1,
+      perPage: 50,
+      filters: {
+        ...(statusFilter !== 'all' && { isVerified: statusFilter === 'verified' }),
+        ...(ratingFilter !== 'all' && { rating: parseInt(ratingFilter) })
+      }
+    },
+    errorPolicy: 'all'
+  })
+
+  const [deleteReview] = useMutation(DELETE_REVIEW, {
+    onCompleted: () => {
+      refetch()
+      toast.success('Review deleted successfully')
+    },
+    onError: (error) => {
+      console.error('Error deleting review:', error)
+      toast.error('Failed to delete review')
+    }
+  })
+
+  const [updateReview] = useMutation(UPDATE_REVIEW, {
+    onCompleted: () => {
+      refetch()
+    },
+    onError: (error) => {
+      console.error('Error updating review:', error)
+      toast.error('Failed to update review')
+    }
+  })
+
+  const reviews = data?.reviews?.reviews || []
+  const stats = {
+    total: data?.reviews?.total || 0,
+    verified: reviews.filter((r: Review) => r.isVerified).length,
+    average: reviews.length > 0 ? reviews.reduce((sum: number, r: Review) => sum + r.rating, 0) / reviews.length : 0,
+    recent: reviews.filter((r: Review) => {
+      const reviewDate = new Date(r.createdAt)
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      return reviewDate > weekAgo
+    }).length
+  }
+
   useEffect(() => {
-    fetchReviews()
-    fetchStats()
-  }, [statusFilter, ratingFilter])
+    refetch()
+  }, [statusFilter, ratingFilter, refetch])
 
-  const fetchReviews = async () => {
-    try {
-      setLoading(true)
-      const params = new URLSearchParams({
-        page: '1',
-        limit: '50'
-      })
-      
-      if (statusFilter !== 'all') {
-        params.append('status', statusFilter)
-      }
-      
-      if (ratingFilter !== 'all') {
-        params.append('rating', ratingFilter)
-      }
-
-      const response = await fetch(`/api/admin/reviews?${params}`)
-      if (response.ok) {
-        const data = await response.json()
-        setReviews(data.reviews)
-      } else {
-        toast.error('Failed to fetch reviews')
-      }
-    } catch (error) {
-      console.error('Error fetching reviews:', error)
-      toast.error('Failed to fetch reviews')
-    } finally {
-      setLoading(false)
-    }
+  const handleViewReview = (review: Review) => {
+    setSelectedReview(review)
+    setShowDetailModal(true)
   }
 
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/admin/reviews')
-      if (response.ok) {
-        const data = await response.json()
-        const allReviews = data.reviews
-        
-        const total = allReviews.length
-        const verified = allReviews.filter((r: Review) => r.isVerified).length
-        const average = total > 0 ? allReviews.reduce((sum: number, r: Review) => sum + r.rating, 0) / total : 0
-        const recent = allReviews.filter((r: Review) => {
-          const reviewDate = new Date(r.createdAt)
-          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-          return reviewDate > weekAgo
-        }).length
-
-        setStats({ total, verified, average, recent })
-      }
-    } catch (error) {
-      console.error('Error fetching stats:', error)
-    }
-  }
-
-  const handleViewReview = async (review: Review) => {
-    try {
-      const response = await fetch(`/api/admin/reviews/${review.id}`)
-      if (response.ok) {
-        const detailData = await response.json()
-        setSelectedReview(detailData)
-        setShowDetailModal(true)
-      } else {
-        toast.error('Failed to load review details')
-      }
-    } catch (error) {
-      console.error('Error fetching review details:', error)
-      toast.error('Failed to load review details')
-    }
-  }
-
-  const handleDeleteReview = async (reviewId: string) => {
+  const handleDeleteReview = (reviewId: string) => {
     if (!confirm('Are you sure you want to delete this review? This action cannot be undone.')) {
       return
     }
 
-    try {
-      const response = await fetch(`/api/admin/reviews/${reviewId}`, {
-        method: 'DELETE'
-      })
-
-      if (response.ok) {
-        toast.success('Review deleted successfully')
-        fetchReviews()
-        fetchStats()
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to delete review')
-      }
-    } catch (error) {
-      console.error('Error deleting review:', error)
-      toast.error('Failed to delete review')
-    }
+    deleteReview({
+      variables: { id: reviewId }
+    })
   }
 
-  const handleToggleVerification = async (reviewId: string, currentStatus: boolean) => {
-    try {
-      const response = await fetch(`/api/admin/reviews/${reviewId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ isVerified: !currentStatus })
-      })
-
-      if (response.ok) {
-        toast.success(`Review ${!currentStatus ? 'verified' : 'unverified'} successfully`)
-        fetchReviews()
-        fetchStats()
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to update review')
+  const handleToggleVerification = (reviewId: string, currentStatus: boolean) => {
+    updateReview({
+      variables: {
+        id: reviewId,
+        input: {
+          isVerified: !currentStatus
+        }
       }
-    } catch (error) {
-      console.error('Error updating review:', error)
-      toast.error('Failed to update review')
-    }
+    }).then(() => {
+      toast.success(`Review ${!currentStatus ? 'verified' : 'unverified'} successfully`)
+    })
   }
 
-  const filteredReviews = reviews.filter(review => {
+  const filteredReviews = reviews.filter((review: Review) => {
     const matchesSearch = 
-      review.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      review.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      review.comment.toLowerCase().includes(searchTerm.toLowerCase())
+      review.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      review.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      review.comment?.toLowerCase().includes(searchTerm.toLowerCase())
     
     return matchesSearch
   })
@@ -348,19 +307,9 @@ export default function AdminReviewsPage() {
                   <TableRow key={review.id}>
                     <TableCell>
                       <div className="flex items-center space-x-3">
-                        {review.productImage && (
-                          <div className="w-10 h-10 relative bg-gray-100 rounded">
-                            <Image
-                              src={review.productImage}
-                              alt={review.productName}
-                              fill
-                              className="object-cover rounded"
-                            />
-                          </div>
-                        )}
                         <div>
-                          <p className="font-medium">{review.productName}</p>
-                          {review.productSlug && (
+                          <p className="font-medium">{review.product?.name}</p>
+                          {review.product?.slug && (
                             <Link
                               href={`/products/${review.productId}`}
                               className="text-sm text-blue-600 hover:underline"
@@ -373,9 +322,9 @@ export default function AdminReviewsPage() {
                     </TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{review.userName}</p>
-                        {review.userEmail && (
-                          <p className="text-sm text-gray-500">{review.userEmail}</p>
+                        <p className="font-medium">{review.user?.name}</p>
+                        {review.user?.email && (
+                          <p className="text-sm text-gray-500">{review.user.email}</p>
                         )}
                         {review.isVerified && (
                           <Badge variant="secondary" className="text-xs mt-1">
@@ -498,19 +447,9 @@ export default function AdminReviewsPage() {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-semibold mb-3">Product Information</h4>
                 <div className="flex items-center space-x-4">
-                  {selectedReview.productImage && (
-                    <div className="w-16 h-16 relative bg-gray-200 rounded">
-                      <Image
-                        src={selectedReview.productImage}
-                        alt={selectedReview.productName}
-                        fill
-                        className="object-cover rounded"
-                      />
-                    </div>
-                  )}
                   <div>
-                    <p className="font-medium">{selectedReview.productName}</p>
-                    {selectedReview.productSlug && (
+                    <p className="font-medium">{selectedReview.product?.name}</p>
+                    {selectedReview.product?.slug && (
                       <Link
                         href={`/products/${selectedReview.productId}`}
                         className="text-sm text-blue-600 hover:underline"
@@ -526,9 +465,9 @@ export default function AdminReviewsPage() {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-semibold mb-3">Customer Information</h4>
                 <div className="space-y-2">
-                  <p><span className="font-medium">Name:</span> {selectedReview.userName}</p>
-                  {selectedReview.userEmail && (
-                    <p><span className="font-medium">Email:</span> {selectedReview.userEmail}</p>
+                  <p><span className="font-medium">Name:</span> {selectedReview.user?.name}</p>
+                  {selectedReview.user?.email && (
+                    <p><span className="font-medium">Email:</span> {selectedReview.user.email}</p>
                   )}
                   <div className="flex items-center">
                     <span className="font-medium">Status:</span> 

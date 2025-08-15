@@ -4,7 +4,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { User, Package, MapPin, LogOut } from 'lucide-react'
+import { User, Package, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { signOut } from 'next-auth/react'
 
@@ -18,11 +18,6 @@ const sidebarItems = [
     title: 'Profile',
     href: '/dashboard/profile',
     icon: User
-  },
-  {
-    title: 'Addresses',
-    href: '/dashboard/addresses',
-    icon: MapPin
   }
 ]
 

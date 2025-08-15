@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +36,12 @@ import { Plus, Search, Edit, Trash2, Copy } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { DiscountType } from '@/types'
 import toast from 'react-hot-toast'
+import { 
+  GET_COUPONS, 
+  CREATE_COUPON, 
+  UPDATE_COUPON, 
+  DELETE_COUPON 
+} from '@/lib/graphql/queries'
 
 interface Coupon {
   id: string
@@ -54,12 +61,24 @@ interface Coupon {
 }
 
 export default function CouponsPage() {
-  const [coupons, setCoupons] = useState<Coupon[]>([])
-  const [loading, setLoading] = useState(true)
+  // GraphQL hooks
+  const { data: couponsData, loading, refetch } = useQuery(GET_COUPONS, {
+    onError: (error) => {
+      console.error('Coupons query error:', error)
+      toast.error('Failed to load coupons')
+    }
+  })
+  const [createCouponMutation] = useMutation(CREATE_COUPON)
+  const [updateCouponMutation] = useMutation(UPDATE_COUPON)
+  const [deleteCouponMutation] = useMutation(DELETE_COUPON)
+  
+  // State for UI
   const [searchTerm, setSearchTerm] = useState('')
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null)
+  
+  const coupons = couponsData?.coupons || []
   
   // Form state
   const [formData, setFormData] = useState({
@@ -76,28 +95,6 @@ export default function CouponsPage() {
     endDate: ''
   })
 
-  useEffect(() => {
-    fetchCoupons()
-  }, [])
-
-  const fetchCoupons = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/admin/coupons')
-      if (response.ok) {
-        const data = await response.json()
-        setCoupons(data)
-      } else {
-        console.error('Failed to fetch coupons:', response.status)
-        setCoupons([])
-      }
-    } catch (error) {
-      console.error('Error fetching coupons:', error)
-      setCoupons([])
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const createCoupon = async () => {
     try {
@@ -120,45 +117,44 @@ export default function CouponsPage() {
       }
       
       // Prepare the data
-      const couponData = {
+      const couponInput = {
         code: formData.code.toUpperCase().trim(),
         name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
+        description: formData.description.trim() || '',
         discountType: formData.discountType,
         discountValue: formData.discountType === DiscountType.FREE_SHIPPING ? 0 : parseFloat(formData.discountValue),
         minOrderAmount: formData.minOrderAmount ? parseFloat(formData.minOrderAmount) : undefined,
         maxDiscountAmount: formData.maxDiscountAmount ? parseFloat(formData.maxDiscountAmount) : undefined,
         usageLimit: formData.usageLimit ? parseInt(formData.usageLimit) : undefined,
         isActive: formData.isActive,
-        startDate: formData.startDate ? new Date(formData.startDate) : undefined,
-        endDate: formData.endDate ? new Date(formData.endDate) : undefined
+        startDate: formData.startDate || undefined,
+        endDate: formData.endDate || undefined
       }
 
-      const url = editingCoupon 
-        ? `/api/admin/coupons/${editingCoupon.id}`
-        : '/api/admin/coupons'
-      const method = editingCoupon ? 'PUT' : 'POST'
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(couponData),
-      })
-
-      if (response.ok) {
-        toast.success(`Coupon ${editingCoupon ? 'updated' : 'created'} successfully!`)
-        setIsCreateDialogOpen(false)
-        resetForm()
-        fetchCoupons()
+      if (editingCoupon) {
+        await updateCouponMutation({
+          variables: {
+            id: editingCoupon.id,
+            input: couponInput
+          }
+        })
+        toast.success('Coupon updated successfully!')
       } else {
-        const error = await response.json()
-        toast.error(error.message || `Failed to ${editingCoupon ? 'update' : 'create'} coupon`)
+        await createCouponMutation({
+          variables: {
+            input: couponInput
+          }
+        })
+        toast.success('Coupon created successfully!')
       }
-    } catch (error) {
+      
+      setIsCreateDialogOpen(false)
+      setEditingCoupon(null)
+      resetForm()
+      refetch()
+    } catch (error: any) {
       console.error('Error creating coupon:', error)
-      toast.error('Failed to create coupon')
+      toast.error(error.message || 'Failed to create coupon')
     } finally {
       setIsCreating(false)
     }
@@ -206,42 +202,51 @@ export default function CouponsPage() {
     }
 
     try {
-      const response = await fetch(`/api/admin/coupons/${couponId}`, {
-        method: 'DELETE',
+      await deleteCouponMutation({
+        variables: { id: couponId }
       })
-
-      if (response.ok) {
-        toast.success('Coupon deleted successfully!')
-        fetchCoupons()
-      } else {
-        const error = await response.json()
-        toast.error(error.message || 'Failed to delete coupon')
-      }
-    } catch (error) {
+      toast.success('Coupon deleted successfully!')
+      refetch()
+    } catch (error: any) {
       console.error('Error deleting coupon:', error)
-      toast.error('Failed to delete coupon')
+      toast.error(error.message || 'Failed to delete coupon')
     }
   }
 
   const toggleCouponStatus = async (couponId: string, isActive: boolean) => {
     try {
-      const response = await fetch(`/api/admin/coupons/${couponId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ isActive }),
-      })
-
-      if (response.ok) {
-        fetchCoupons()
+      const coupon = coupons.find(c => c.id === couponId)
+      if (!coupon) return
+      
+      // Only send fields that are part of CouponInput
+      const couponInput = {
+        code: coupon.code,
+        name: coupon.name,
+        description: coupon.description || '',
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        minOrderAmount: coupon.minOrderAmount,
+        maxDiscountAmount: coupon.maxDiscountAmount,
+        usageLimit: coupon.usageLimit,
+        isActive,
+        startDate: coupon.startDate,
+        endDate: coupon.endDate
       }
-    } catch (error) {
+      
+      await updateCouponMutation({
+        variables: {
+          id: couponId,
+          input: couponInput
+        }
+      })
+      refetch()
+    } catch (error: any) {
       console.error('Error updating coupon:', error)
+      toast.error(error.message || 'Failed to update coupon status')
     }
   }
 
-  const filteredCoupons = coupons.filter(coupon =>
+  const filteredCoupons = coupons.filter((coupon: any) =>
     coupon.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
     coupon.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -424,7 +429,7 @@ export default function CouponsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-green-600">
-              {coupons.filter(c => c.isActive).length}
+              {coupons.filter((c: any) => c.isActive).length}
             </div>
             <p className="text-gray-600 text-sm">Active</p>
           </CardContent>
@@ -432,7 +437,7 @@ export default function CouponsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-blue-600">
-              {coupons.reduce((sum, c) => sum + c.usedCount, 0)}
+              {coupons.reduce((sum: number, c: any) => sum + c.usedCount, 0)}
             </div>
             <p className="text-gray-600 text-sm">Total Uses</p>
           </CardContent>
@@ -440,7 +445,7 @@ export default function CouponsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-orange-600">
-              {formatCurrency(coupons.reduce((sum, c) => 
+              {formatCurrency(coupons.reduce((sum: number, c: any) => 
                 sum + (c.discountType === DiscountType.FIXED_AMOUNT ? c.discountValue * c.usedCount : 0), 0
               ))}
             </div>
@@ -488,7 +493,7 @@ export default function CouponsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCoupons.map((coupon) => (
+                {filteredCoupons.map((coupon: any) => (
                   <TableRow key={coupon.id}>
                     <TableCell>
                       <div className="flex items-center space-x-2">

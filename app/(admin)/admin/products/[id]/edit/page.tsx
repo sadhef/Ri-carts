@@ -1,60 +1,49 @@
-import { notFound } from 'next/navigation'
-import { auth } from '@/auth'
-import connectToDatabase from '@/lib/mongodb'
-import { Product, Category } from '@/lib/models'
-import { serializeProduct, serializeCategory } from '@/lib/serialize'
+'use client'
+
+import { useParams } from 'next/navigation'
+import { useQuery } from '@apollo/client'
 import { ProductForm } from '@/components/admin/product-form'
+import { GET_PRODUCT } from '@/lib/graphql/queries'
+import { Skeleton } from '@/components/ui/skeleton'
 
-type Params = {
-  id: string
-}
+export default function EditProductPage() {
+  const params = useParams()
+  const productId = params?.id as string
 
-interface EditProductPageProps {
-  params: Promise<Params>
-}
+  const { data, loading, error } = useQuery(GET_PRODUCT, {
+    variables: { id: productId },
+    skip: !productId
+  })
 
-async function getProduct(id: string) {
-  try {
-    await connectToDatabase()
-    
-    const product = await Product.findById(id).lean()
-    
-    if (!product) {
-      notFound()
-    }
-
-    return serializeProduct(product)
-  } catch (error) {
-    console.error('Error fetching product:', error)
-    notFound()
-  }
-}
-
-async function getCategories() {
-  try {
-    await connectToDatabase()
-    
-    const categories = await Category.find().lean()
-    
-    return categories.map(category => serializeCategory(category))
-  } catch (error) {
-    console.error('Error fetching categories:', error)
-    return []
-  }
-}
-
-export default async function EditProductPage({ params }: EditProductPageProps) {
-  const session = await auth()
-  
-  if (!session?.user || session.user.role !== 'ADMIN') {
-    notFound()
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-64 mt-2" />
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
+        </div>
+      </div>
+    )
   }
 
-  const resolvedParams = await params
-  const [product, categories] = await Promise.all([
-    getProduct(resolvedParams.id),
-    getCategories()
-  ])
+  if (error || !data?.product) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Edit Product</h1>
+        </div>
+        <div className="text-center py-8">
+          <p className="text-red-600">Product not found or error loading product.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const product = data.product
 
   return (
     <div className="space-y-6">
@@ -65,7 +54,6 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
 
       <ProductForm 
         initialData={product}
-        categories={categories}
         isEditing={true}
       />
     </div>

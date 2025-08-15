@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useMutation } from '@apollo/client'
 import Link from 'next/link'
 import { Eye, Edit, Trash2, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
+import { DELETE_PRODUCT } from '@/lib/graphql/queries'
 
 interface ProductActionsProps {
   productId: string
@@ -33,19 +35,15 @@ export function ProductActions({ productId, productName }: ProductActionsProps) 
   const [isDeleting, setIsDeleting] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
+  const [deleteProduct] = useMutation(DELETE_PRODUCT)
 
   const handleDeleteProduct = async () => {
     try {
       setIsDeleting(true)
       
-      const response = await fetch(`/api/admin/products/${productId}`, {
-        method: 'DELETE',
+      await deleteProduct({
+        variables: { id: productId }
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to delete product')
-      }
 
       toast({
         title: 'Success',

@@ -115,3 +115,24 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    await connectToDatabase()
+    const body = await request.json()
+    
+    const newProduct = new Product(body)
+    const savedProduct = await newProduct.save()
+
+    const category = await Category.findById(savedProduct.categoryId).lean()
+    const serializedProduct = {
+      ...serializeProduct(savedProduct.toObject()),
+      category: category ? serializeCategory(category) : null
+    }
+
+    return NextResponse.json(serializedProduct, { status: 201 })
+  } catch (error) {
+    console.error('Create product error:', error)
+    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
+  }
+}

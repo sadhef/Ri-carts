@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery } from '@apollo/client'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import * as z from 'zod'
@@ -27,7 +28,8 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ProductStatus } from '@/types'
+// Removed problematic enum import
+import { GET_CATEGORIES } from '@/lib/graphql/queries'
 
 const productSchema = z.object({
   name: z.string().min(1, 'Product name is required'),
@@ -44,7 +46,7 @@ const productSchema = z.object({
   tags: z.array(z.string()).optional(),
   metaTitle: z.string().optional(),
   metaDescription: z.string().optional(),
-  status: z.nativeEnum(ProductStatus),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'DRAFT', 'OUT_OF_STOCK']),
   featured: z.boolean().default(false),
 })
 
@@ -55,13 +57,17 @@ interface ProductFormProps {
     id?: string
     images?: Array<{ url: string; publicId: string; alt?: string; isPrimary?: boolean }>
   }
-  categories: Array<{ id: string; name: string }>
   isEditing?: boolean
 }
 
-export function ProductForm({ initialData, categories }: ProductFormProps) {
+export function ProductForm({ initialData, isEditing }: ProductFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  
+  // GraphQL hooks  
+  const { data: categoriesData, loading: categoriesLoading } = useQuery(GET_CATEGORIES)
+  
+  const categories = categoriesData?.categories || []
   const [images, setImages] = useState<Array<{
     url: string
     publicId: string
@@ -88,10 +94,36 @@ export function ProductForm({ initialData, categories }: ProductFormProps) {
       tags: initialData?.tags || [],
       metaTitle: initialData?.metaTitle || '',
       metaDescription: initialData?.metaDescription || '',
-      status: initialData?.status || ProductStatus.ACTIVE,
+      status: initialData?.status || 'ACTIVE',
       featured: initialData?.featured || false,
     },
   })
+
+  // Reset form when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      form.reset({
+        name: initialData.name || '',
+        slug: initialData.slug || '',
+        description: initialData.description || '',
+        shortDescription: initialData.shortDescription || '',
+        price: initialData.price || 0,
+        comparePrice: initialData.comparePrice || 0,
+        categoryId: initialData.categoryId || '',
+        stock: initialData.stock || 0,
+        lowStockThreshold: initialData.lowStockThreshold || 10,
+        sku: initialData.sku || '',
+        weight: initialData.weight || 0,
+        tags: initialData.tags || [],
+        metaTitle: initialData.metaTitle || '',
+        metaDescription: initialData.metaDescription || '',
+        status: initialData.status || 'ACTIVE',
+        featured: initialData.featured || false,
+      })
+      setImages(initialData.images || [])
+      setTags(initialData.tags || [])
+    }
+  }, [initialData, form])
 
   // Generate slug from name
   const generateSlug = (name: string) => {
@@ -161,37 +193,57 @@ export function ProductForm({ initialData, categories }: ProductFormProps) {
     try {
       setLoading(true)
 
-      const productData = {
-        ...data,
-        images,
-        tags,
+      const productInput = {
+        name: data.name,
+        slug: data.slug,
+        description: data.description,
+        shortDescription: data.shortDescription,
+        price: data.price,
+        comparePrice: data.comparePrice,
+        categoryId: data.categoryId,
+        stock: data.stock,
+        lowStockThreshold: data.lowStockThreshold,
+        sku: data.sku,
+        weight: data.weight,
+        tags: tags,
+        metaTitle: data.metaTitle,
+        metaDescription: data.metaDescription,
+        status: data.status,
+        featured: data.featured,
+        images: images
       }
 
-      const url = initialData?.id 
-        ? `/api/admin/products/${initialData.id}` 
-        : '/api/admin/products'
-      
-      const method = initialData?.id ? 'PUT' : 'POST'
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(productData),
-      })
-
-      if (response.ok) {
-        toast.success(initialData?.id ? 'Product updated' : 'Product created')
-        router.push('/admin/products')
-        router.refresh()
+      if (isEditing && initialData?.id) {
+        const response = await fetch(`/api/products/${initialData.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productInput)
+        })
+        
+        if (!response.ok) throw new Error('Failed to update product')
+        toast.success('Product updated successfully')
       } else {
-        const error = await response.json()
-        toast.error(error.message || 'Something went wrong')
+        const response = await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productInput)
+        })
+        
+        if (!response.ok) throw new Error('Failed to create product')
+        toast.success('Product created successfully')
       }
+      
+      router.push('/admin/products')
     } catch (error) {
+      console.error('Product submission error:', error)
       toast.error('Something went wrong')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (categoriesLoading) {
+    return <div>Loading categories...</div>
   }
 
   return (
@@ -385,7 +437,7 @@ export function ProductForm({ initialData, categories }: ProductFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select category" />
@@ -543,14 +595,14 @@ export function ProductForm({ initialData, categories }: ProductFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {Object.values(ProductStatus).map((status) => (
+                      {['ACTIVE', 'INACTIVE', 'DRAFT', 'OUT_OF_STOCK'].map((status) => (
                         <SelectItem key={status} value={status}>
                           {status}
                         </SelectItem>

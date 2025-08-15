@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +47,16 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import toast from 'react-hot-toast'
+import {
+  GET_NEWSLETTER_SUBSCRIBERS,
+  GET_NEWSLETTER_CAMPAIGNS,
+  GET_NEWSLETTER_STATS,
+  CREATE_NEWSLETTER_CAMPAIGN,
+  DELETE_NEWSLETTER_CAMPAIGN,
+  CREATE_NEWSLETTER_SUBSCRIBER,
+  UPDATE_NEWSLETTER_SUBSCRIBER,
+  DELETE_NEWSLETTER_SUBSCRIBER
+} from '@/lib/graphql/queries'
 
 interface Subscriber {
   id: string
@@ -80,10 +91,29 @@ interface NewsletterStats {
 }
 
 export default function NewsletterPage() {
-  const [subscribers, setSubscribers] = useState<Subscriber[]>([])
-  const [newsletters, setNewsletters] = useState<Newsletter[]>([])
-  const [stats, setStats] = useState<NewsletterStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  // GraphQL queries
+  const { data: subscribersData, loading: subscribersLoading, refetch: refetchSubscribers } = useQuery(GET_NEWSLETTER_SUBSCRIBERS)
+  const { data: campaignsData, loading: campaignsLoading, refetch: refetchCampaigns } = useQuery(GET_NEWSLETTER_CAMPAIGNS)
+  const { data: statsData, loading: statsLoading } = useQuery(GET_NEWSLETTER_STATS)
+  
+  // GraphQL mutations
+  const [createCampaign] = useMutation(CREATE_NEWSLETTER_CAMPAIGN)
+  const [deleteCampaign] = useMutation(DELETE_NEWSLETTER_CAMPAIGN)
+  const [createSubscriber] = useMutation(CREATE_NEWSLETTER_SUBSCRIBER, {
+    onCompleted: (data) => {
+      console.log('Newsletter subscriber created:', data)
+    },
+    onError: (error) => {
+      console.error('Newsletter subscriber creation error:', error)
+    }
+  })
+  const [updateSubscriber] = useMutation(UPDATE_NEWSLETTER_SUBSCRIBER)
+  const [deleteSubscriber] = useMutation(DELETE_NEWSLETTER_SUBSCRIBER)
+  
+  const subscribers = subscribersData?.newsletterSubscribers || []
+  const newsletters = campaignsData?.newsletterCampaigns || []
+  const stats = statsData?.newsletterStats || null
+  const loading = subscribersLoading || campaignsLoading || statsLoading
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [isComposerOpen, setIsComposerOpen] = useState(false)
@@ -107,56 +137,7 @@ export default function NewsletterPage() {
     name: ''
   })
 
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const fetchData = async () => {
-    try {
-      setLoading(true)
-      
-      // Fetch subscribers
-      const subscribersResponse = await fetch('/api/admin/newsletter/subscribers')
-      if (subscribersResponse.ok) {
-        const subscribersData = await subscribersResponse.json()
-        setSubscribers(subscribersData)
-      } else {
-        console.error('Failed to fetch subscribers:', subscribersResponse.status)
-        setSubscribers([])
-      }
-
-      // Fetch newsletters
-      const newslettersResponse = await fetch('/api/admin/newsletter/campaigns')
-      if (newslettersResponse.ok) {
-        const newslettersData = await newslettersResponse.json()
-        setNewsletters(newslettersData)
-      } else {
-        console.error('Failed to fetch newsletters:', newslettersResponse.status)
-        setNewsletters([])
-      }
-
-      // Fetch newsletter stats
-      const statsResponse = await fetch('/api/admin/newsletter/stats')
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json()
-        setStats(statsData)
-      } else {
-        console.error('Failed to fetch newsletter stats:', statsResponse.status)
-        setStats({
-          totalSubscribers: 0,
-          activeSubscribers: 0,
-          unsubscribeRate: 0,
-          averageOpenRate: 0,
-          averageClickRate: 0,
-          recentGrowth: 0
-        })
-      }
-    } catch (error) {
-      console.error('Error fetching newsletter data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Data fetching is now handled by Apollo Client useQuery hooks
 
   const handleCreateNewsletter = async () => {
     if (!newNewsletter.subject.trim() || !newNewsletter.content.trim()) {
@@ -165,23 +146,19 @@ export default function NewsletterPage() {
     }
 
     try {
-      const response = await fetch('/api/admin/newsletter/campaigns', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newNewsletter),
+      await createCampaign({
+        variables: {
+          input: {
+            subject: newNewsletter.subject,
+            content: newNewsletter.content,
+            scheduledAt: newNewsletter.scheduledAt || undefined
+          }
+        }
       })
-
-      if (response.ok) {
-        toast.success('Newsletter campaign created successfully!')
-        setIsComposerOpen(false)
-        setNewNewsletter({ subject: '', content: '', scheduledAt: '' })
-        fetchData() // Refresh data
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to create campaign')
-      }
+      toast.success('Newsletter campaign created successfully!')
+      setIsComposerOpen(false)
+      setNewNewsletter({ subject: '', content: '', scheduledAt: '' })
+      refetchCampaigns()
     } catch (error) {
       console.error('Error creating newsletter:', error)
       toast.error('Failed to create campaign')
@@ -190,21 +167,14 @@ export default function NewsletterPage() {
 
   const handleUnsubscribe = async (subscriberId: string) => {
     try {
-      const response = await fetch(`/api/admin/newsletter/subscribers/${subscriberId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ subscribed: false }),
+      await updateSubscriber({
+        variables: {
+          id: subscriberId,
+          input: { isActive: false }
+        }
       })
-
-      if (response.ok) {
-        toast.success('Subscriber unsubscribed successfully')
-        fetchData() // Refresh data
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to unsubscribe user')
-      }
+      toast.success('Subscriber unsubscribed successfully')
+      refetchSubscribers()
     } catch (error) {
       console.error('Error updating subscriber:', error)
       toast.error('Failed to unsubscribe user')
@@ -217,17 +187,11 @@ export default function NewsletterPage() {
     }
 
     try {
-      const response = await fetch(`/api/admin/newsletter/campaigns/${campaignId}`, {
-        method: 'DELETE',
+      await deleteCampaign({
+        variables: { id: campaignId }
       })
-
-      if (response.ok) {
-        toast.success('Campaign deleted successfully!')
-        fetchData() // Refresh data
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to delete campaign')
-      }
+      toast.success('Campaign deleted successfully!')
+      refetchCampaigns()
     } catch (error) {
       console.error('Error deleting campaign:', error)
       toast.error('Failed to delete campaign')
@@ -255,27 +219,45 @@ export default function NewsletterPage() {
       return
     }
 
-    try {
-      const response = await fetch('/api/admin/newsletter/subscribers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newSubscriber),
-      })
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newSubscriber.email.trim())) {
+      toast.error('Please enter a valid email address')
+      return
+    }
 
-      if (response.ok) {
-        toast.success('Subscriber added successfully!')
-        setIsAddSubscriberOpen(false)
-        setNewSubscriber({ email: '', name: '' })
-        fetchData() // Refresh data
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to add subscriber')
+    try {
+      const result = await createSubscriber({
+        variables: {
+          input: {
+            email: newSubscriber.email.trim(),
+            name: newSubscriber.name ? newSubscriber.name.trim() : undefined
+          }
+        }
+      })
+      
+      console.log('Subscriber creation result:', result)
+      toast.success('Subscriber added successfully!')
+      setIsAddSubscriberOpen(false)
+      setNewSubscriber({ email: '', name: '' })
+      
+      // Refetch subscribers with error handling
+      try {
+        await refetchSubscribers()
+      } catch (refetchError) {
+        console.error('Error refetching subscribers:', refetchError)
+        // Don't show error to user as the subscriber was still created successfully
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding subscriber:', error)
-      toast.error('Failed to add subscriber')
+      
+      // Handle specific GraphQL errors
+      const errorMessage = error?.graphQLErrors?.[0]?.message || 
+                          error?.networkError?.message || 
+                          error?.message ||
+                          'Failed to add subscriber'
+      
+      toast.error(errorMessage)
     }
   }
 
@@ -292,24 +274,17 @@ export default function NewsletterPage() {
     if (!editingSubscriber) return
 
     try {
-      const response = await fetch(`/api/admin/newsletter/subscribers/${editingSubscriber.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: editSubscriber.name }),
+      await updateSubscriber({
+        variables: {
+          id: editingSubscriber.id,
+          input: { name: editSubscriber.name }
+        }
       })
-
-      if (response.ok) {
-        toast.success('Subscriber updated successfully!')
-        setIsEditSubscriberOpen(false)
-        setEditingSubscriber(null)
-        setEditSubscriber({ email: '', name: '' })
-        fetchData() // Refresh data
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to update subscriber')
-      }
+      toast.success('Subscriber updated successfully!')
+      setIsEditSubscriberOpen(false)
+      setEditingSubscriber(null)
+      setEditSubscriber({ email: '', name: '' })
+      refetchSubscribers()
     } catch (error) {
       console.error('Error updating subscriber:', error)
       toast.error('Failed to update subscriber')
@@ -322,31 +297,25 @@ export default function NewsletterPage() {
     }
 
     try {
-      const response = await fetch(`/api/admin/newsletter/subscribers/${subscriberId}`, {
-        method: 'DELETE',
+      await deleteSubscriber({
+        variables: { id: subscriberId }
       })
-
-      if (response.ok) {
-        toast.success('Subscriber deleted successfully!')
-        fetchData() // Refresh data
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to delete subscriber')
-      }
+      toast.success('Subscriber deleted successfully!')
+      refetchSubscribers()
     } catch (error) {
       console.error('Error deleting subscriber:', error)
       toast.error('Failed to delete subscriber')
     }
   }
 
-  const filteredSubscribers = subscribers.filter(subscriber => {
+  const filteredSubscribers = subscribers.filter((subscriber: any) => {
     const matchesSearch = 
       subscriber.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (subscriber.name && subscriber.name.toLowerCase().includes(searchTerm.toLowerCase()))
     
     const matchesStatus = statusFilter === 'all' || 
-      (statusFilter === 'active' && subscriber.subscribed) ||
-      (statusFilter === 'inactive' && !subscriber.subscribed)
+      (statusFilter === 'active' && subscriber.isActive) ||
+      (statusFilter === 'inactive' && !subscriber.isActive)
     
     return matchesSearch && matchesStatus
   })
@@ -709,7 +678,7 @@ export default function NewsletterPage() {
                   </TableCell>
                   <TableCell>{subscriber.name || '-'}</TableCell>
                   <TableCell>
-                    {subscriber.subscribed ? (
+                    {subscriber.isActive ? (
                       <Badge variant="secondary" className="bg-green-100 text-green-800">
                         <CheckCircle className="w-3 h-3 mr-1" />
                         Active
@@ -734,7 +703,7 @@ export default function NewsletterPage() {
                       <Button variant="outline" size="sm" onClick={() => handleEditSubscriberClick(subscriber)}>
                         <Edit className="w-4 h-4" />
                       </Button>
-                      {subscriber.subscribed && (
+                      {subscriber.isActive && (
                         <Button 
                           variant="outline" 
                           size="sm"

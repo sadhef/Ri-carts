@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { Eye, Package, Clock, CheckCircle, XCircle, Truck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { format } from 'date-fns'
+import { GET_USER_ORDERS } from '@/lib/graphql/queries'
+import { useSession } from 'next-auth/react'
 
 interface Order {
   id: string
@@ -57,39 +60,24 @@ const statusColors = {
 }
 
 export default function OrdersPage() {
+  const { data: session } = useSession()
   const router = useRouter()
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
 
-  const fetchOrders = async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: '10',
-        ...(statusFilter && statusFilter !== 'all' && { status: statusFilter })
-      })
+  const { data, loading, error } = useQuery(GET_USER_ORDERS, {
+    variables: {
+      userId: session?.user?.id,
+      page: currentPage,
+      perPage: 10
+    },
+    skip: !session?.user?.id,
+    errorPolicy: 'all'
+  })
 
-      const response = await fetch(`/api/orders?${params}`)
-      if (response.ok) {
-        const data = await response.json()
-        setOrders(data.orders)
-        setTotalPages(data.pagination.pages)
-      }
-    } catch (error) {
-      console.error('Failed to fetch orders:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchOrders()
-  }, [currentPage, statusFilter])
+  const orders = data?.userOrders?.orders || []
+  const totalPages = Math.ceil((data?.userOrders?.total || 0) / 10)
 
   const filteredOrders = orders.filter(order => {
     if (!order.orderNumber || !order.status) return false

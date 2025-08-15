@@ -2,11 +2,14 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { useMutation } from '@apollo/client'
 import toast from 'react-hot-toast'
+import { SUBSCRIBE_NEWSLETTER } from '@/lib/graphql/queries'
 
 export function Footer() {
   const [email, setEmail] = useState('')
   const [isSubscribing, setIsSubscribing] = useState(false)
+  const [subscribeNewsletter] = useMutation(SUBSCRIBE_NEWSLETTER)
 
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,20 +26,15 @@ export function Footer() {
 
     try {
       setIsSubscribing(true)
-      const response = await fetch('/api/newsletter/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: email.trim() }),
+      const { data } = await subscribeNewsletter({
+        variables: {
+          email: email.trim()
+        }
       })
 
-      if (response.ok) {
+      if (data?.subscribeNewsletter) {
         toast.success('Successfully subscribed to our newsletter!')
         setEmail('')
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to subscribe. Please try again.')
       }
     } catch (error) {
       console.error('Newsletter subscription error:', error)

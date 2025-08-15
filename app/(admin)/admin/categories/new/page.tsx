@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+// Removed GraphQL import
 import Link from 'next/link'
 import { ArrowLeft, Save, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import toast from 'react-hot-toast'
+// Removed GraphQL query
 
 export default function NewCategoryPage() {
   const router = useRouter()
@@ -40,26 +42,23 @@ export default function NewCategoryPage() {
     }
 
     setLoading(true)
-    
     try {
       const response = await fetch('/api/admin/categories', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
       })
 
-      if (response.ok) {
-        toast.success('Category created successfully!')
-        router.push('/admin/categories')
-      } else {
-        const error = await response.json()
-        toast.error(error.message || 'Failed to create category')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to create category')
       }
-    } catch (error) {
+
+      toast.success('Category created successfully!')
+      router.push('/admin/categories')
+    } catch (error: any) {
       console.error('Error creating category:', error)
-      toast.error('Failed to create category')
+      toast.error(error.message || 'Failed to create category')
     } finally {
       setLoading(false)
     }

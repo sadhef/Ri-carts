@@ -2,9 +2,11 @@
 
 import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
+import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { Package, User, MapPin, ShoppingBag, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { GET_DASHBOARD_STATS } from '@/lib/graphql/queries'
 
 interface DashboardStats {
   totalOrders: number
@@ -15,40 +17,21 @@ interface DashboardStats {
 
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const [stats, setStats] = useState<DashboardStats>({
+  
+  // GraphQL query
+  const { data: statsData, loading } = useQuery(GET_DASHBOARD_STATS, {
+    variables: { userId: session?.user?.id },
+    skip: !session?.user?.id
+  })
+  
+  const stats = statsData?.dashboardStats || {
     totalOrders: 0,
     pendingOrders: 0,
     totalSpent: 0,
     recentOrders: []
-  })
-  const [loading, setLoading] = useState(true)
+  }
 
-  useEffect(() => {
-    const fetchDashboardStats = async () => {
-      try {
-        const response = await fetch('/api/orders?limit=5')
-        if (response.ok) {
-          const data = await response.json()
-          const orders = data.orders || []
-          
-          setStats({
-            totalOrders: data.pagination?.total || 0,
-            pendingOrders: orders.filter((order: any) => order.status === 'PENDING').length,
-            totalSpent: orders.reduce((sum: number, order: any) => sum + order.totalAmount, 0),
-            recentOrders: orders.slice(0, 3)
-          })
-        }
-      } catch (error) {
-        console.error('Failed to fetch dashboard stats:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    if (session) {
-      fetchDashboardStats()
-    }
-  }, [session])
+  // Data fetching is now handled by Apollo Client useQuery hook
 
   if (loading) {
     return (

@@ -1,44 +1,24 @@
+'use client'
+
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CategoriesTable } from '@/components/admin/categories-table'
-import connectToDatabase from '@/lib/mongodb'
-import { Category, Product } from '@/lib/models'
-import { serializeCategory } from '@/lib/serialize'
+import { useQuery } from '@apollo/client'
+import { GET_CATEGORIES } from '@/lib/graphql/queries'
 
-async function getCategories() {
-  try {
-    await connectToDatabase()
-    
-    const categories = await Category.find()
-      .sort({ createdAt: -1 })
-      .lean()
-
-    // Get product count for each category
-    const categoriesWithCount = await Promise.all(
-      categories.map(async (category) => {
-        const productCount = await Product.countDocuments({ 
-          categoryId: category._id.toString() 
-        })
-        
-        return {
-          ...serializeCategory(category),
-          productCount
-        }
-      })
-    )
-
-    return categoriesWithCount
-  } catch (error) {
+function CategoriesContent() {
+  const { data, loading, error } = useQuery(GET_CATEGORIES)
+  
+  if (loading) return <CategoriesPageSkeleton />
+  if (error) {
     console.error('Error fetching categories:', error)
-    return []
+    return <div>Error loading categories</div>
   }
-}
 
-export default async function CategoriesPage() {
-  const categories = await getCategories()
+  const categories = data?.categories || []
 
   return (
     <div className="space-y-6">
@@ -67,29 +47,50 @@ export default async function CategoriesPage() {
 
       <div className="border border-black/10 p-6 bg-white">
         <h2 className="font-semibold text-black mb-6 text-sm tracking-wide uppercase">Category List</h2>
-        <Suspense fallback={<CategoriesTableSkeleton />}>
-          <CategoriesTable categories={categories} />
-        </Suspense>
+        <CategoriesTable categories={categories} />
       </div>
     </div>
   )
 }
 
-function CategoriesTableSkeleton() {
+export default function CategoriesPage() {
   return (
-    <div className="space-y-4">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="flex items-center space-x-4 p-4">
-          <div className="h-12 w-12 bg-black/5 rounded-lg animate-pulse" />
-          <div className="space-y-2 flex-1">
-            <div className="h-4 w-32 bg-black/5 rounded animate-pulse" />
-          </div>
+    <Suspense fallback={<CategoriesPageSkeleton />}>
+      <CategoriesContent />
+    </Suspense>
+  )
+}
+
+function CategoriesPageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="h-8 w-32 bg-black/5 rounded animate-pulse" />
           <div className="h-4 w-48 bg-black/5 rounded animate-pulse" />
-          <div className="h-4 w-20 bg-black/5 rounded animate-pulse" />
-          <div className="h-4 w-24 bg-black/5 rounded animate-pulse" />
-          <div className="h-8 w-8 bg-black/5 rounded animate-pulse" />
         </div>
-      ))}
+        <div className="h-10 w-32 bg-black/5 rounded animate-pulse" />
+      </div>
+      <div className="flex items-center space-x-4">
+        <div className="h-10 w-64 bg-black/5 rounded animate-pulse" />
+      </div>
+      <div className="border border-black/10 p-6 bg-white">
+        <div className="h-4 w-32 bg-black/5 rounded animate-pulse mb-6" />
+        <div className="space-y-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center space-x-4 p-4">
+              <div className="h-12 w-12 bg-black/5 rounded-lg animate-pulse" />
+              <div className="space-y-2 flex-1">
+                <div className="h-4 w-32 bg-black/5 rounded animate-pulse" />
+              </div>
+              <div className="h-4 w-48 bg-black/5 rounded animate-pulse" />
+              <div className="h-4 w-20 bg-black/5 rounded animate-pulse" />
+              <div className="h-4 w-24 bg-black/5 rounded animate-pulse" />
+              <div className="h-8 w-8 bg-black/5 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

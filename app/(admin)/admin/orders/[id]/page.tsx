@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useQuery } from '@apollo/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { ArrowLeft, Package, CreditCard, MapPin, User } from 'lucide-react'
 import { OrderStatus } from '@/types'
 import { formatCurrency } from '@/lib/utils'
+import { GET_ORDER } from '@/lib/graphql/queries'
 
 interface OrderItem {
   id: string
@@ -64,33 +65,17 @@ const statusColors = {
 export default function OrderDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const [order, setOrder] = useState<Order | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
   const orderId = params.id as string
 
-  useEffect(() => {
-    const fetchOrder = async () => {
-      try {
-        const response = await fetch(`/api/admin/orders/${orderId}`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch order')
-        }
-        const data = await response.json()
-        setOrder(data)
-      } catch (err) {
-        setError('Failed to load order details')
-        console.error('Error fetching order:', err)
-      } finally {
-        setLoading(false)
-      }
+  const { data, loading, error } = useQuery(GET_ORDER, {
+    variables: { id: orderId },
+    skip: !orderId,
+    onError: (error) => {
+      console.error('Error fetching order:', error)
     }
+  })
 
-    if (orderId) {
-      fetchOrder()
-    }
-  }, [orderId])
+  const order = data?.order
 
   if (loading) {
     return (
@@ -118,7 +103,7 @@ export default function OrderDetailPage() {
         </div>
         <div className="flex items-center justify-center py-12">
           <p className="rr-body" style={{ color: 'var(--rr-medium-gray)' }}>
-            {error || 'Order not found'}
+            {error?.message || 'Order not found'}
           </p>
         </div>
       </div>

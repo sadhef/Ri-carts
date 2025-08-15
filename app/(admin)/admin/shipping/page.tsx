@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +25,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Plus, Edit, Trash2, MapPin, Truck, Package, Printer } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import toast from 'react-hot-toast'
+import {
+  GET_SHIPPING_ZONES,
+  GET_SHIPPING_RATES,
+  CREATE_SHIPPING_ZONE,
+  UPDATE_SHIPPING_ZONE,
+  DELETE_SHIPPING_ZONE,
+  CREATE_SHIPPING_RATE,
+  UPDATE_SHIPPING_RATE,
+  DELETE_SHIPPING_RATE
+} from '@/lib/graphql/queries'
 
 interface ShippingZone {
   id: string
@@ -61,9 +72,22 @@ const shippingMethods = [
 ]
 
 export default function ShippingPage() {
-  const [zones, setZones] = useState<ShippingZone[]>([])
-  const [rates, setRates] = useState<ShippingRate[]>([])
-  const [loading, setLoading] = useState(true)
+  // GraphQL queries
+  const { data: zonesData, loading: zonesLoading, refetch: refetchZones } = useQuery(GET_SHIPPING_ZONES)
+  const { data: ratesData, loading: ratesLoading, refetch: refetchRates } = useQuery(GET_SHIPPING_RATES)
+  
+  // GraphQL mutations
+  const [createZone] = useMutation(CREATE_SHIPPING_ZONE)
+  const [updateZone] = useMutation(UPDATE_SHIPPING_ZONE)
+  const [deleteZoneMutation] = useMutation(DELETE_SHIPPING_ZONE)
+  const [createRate] = useMutation(CREATE_SHIPPING_RATE)
+  const [updateRate] = useMutation(UPDATE_SHIPPING_RATE)
+  const [deleteRateMutation] = useMutation(DELETE_SHIPPING_RATE)
+  
+  const zones = zonesData?.shippingZones || []
+  const rates = ratesData?.shippingRates || []
+  const loading = zonesLoading || ratesLoading
+  
   const [activeTab, setActiveTab] = useState('zones')
   const [showZoneModal, setShowZoneModal] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
@@ -93,64 +117,37 @@ export default function ShippingPage() {
     isActive: true
   })
 
-  useEffect(() => {
-    fetchShippingData()
-  }, [])
-
-  const fetchShippingData = async () => {
-    try {
-      setLoading(true)
-      const [zonesResponse, ratesResponse] = await Promise.all([
-        fetch('/api/admin/shipping/zones'),
-        fetch('/api/admin/shipping/rates')
-      ])
-
-      if (zonesResponse.ok) {
-        const zonesData = await zonesResponse.json()
-        setZones(zonesData)
-      }
-
-      if (ratesResponse.ok) {
-        const ratesData = await ratesResponse.json()
-        setRates(ratesData)
-      }
-    } catch (error) {
-      console.error('Error fetching shipping data:', error)
-      toast.error('Failed to load shipping data')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Data fetching is now handled by Apollo Client useQuery hooks
 
   const saveZone = async () => {
     try {
-      const method = editingZone ? 'PUT' : 'POST'
-      const url = editingZone 
-        ? `/api/admin/shipping/zones/${editingZone.id}`
-        : '/api/admin/shipping/zones'
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...zoneForm,
-          countries: zoneForm.countries.filter(c => c.trim()),
-          states: zoneForm.states.filter(s => s.trim()),
-        }),
-      })
-
-      if (response.ok) {
-        toast.success(`Zone ${editingZone ? 'updated' : 'created'} successfully`)
-        setShowZoneModal(false)
-        setEditingZone(null)
-        setZoneForm({ name: '', countries: [''], states: [''], isDefault: false })
-        fetchShippingData()
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to save zone')
+      const zoneInput = {
+        name: zoneForm.name,
+        countries: zoneForm.countries.filter(c => c.trim()),
+        states: zoneForm.states.filter(s => s.trim()),
+        isDefault: zoneForm.isDefault
       }
+
+      if (editingZone) {
+        await updateZone({
+          variables: {
+            id: editingZone.id,
+            input: zoneInput
+          }
+        })
+      } else {
+        await createZone({
+          variables: {
+            input: zoneInput
+          }
+        })
+      }
+
+      toast.success(`Zone ${editingZone ? 'updated' : 'created'} successfully`)
+      setShowZoneModal(false)
+      setEditingZone(null)
+      setZoneForm({ name: '', countries: [''], states: [''], isDefault: false })
+      refetchZones()
     } catch (error) {
       console.error('Error saving zone:', error)
       toast.error('Failed to save zone')
@@ -161,17 +158,11 @@ export default function ShippingPage() {
     if (!confirm('Are you sure you want to delete this zone?')) return
 
     try {
-      const response = await fetch(`/api/admin/shipping/zones/${zoneId}`, {
-        method: 'DELETE',
+      await deleteZoneMutation({
+        variables: { id: zoneId }
       })
-
-      if (response.ok) {
-        toast.success('Zone deleted successfully')
-        fetchShippingData()
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to delete zone')
-      }
+      toast.success('Zone deleted successfully')
+      refetchZones()
     } catch (error) {
       console.error('Error deleting zone:', error)
       toast.error('Failed to delete zone')
@@ -180,48 +171,52 @@ export default function ShippingPage() {
 
   const saveRate = async () => {
     try {
-      const method = editingRate ? 'PUT' : 'POST'
-      const url = editingRate 
-        ? `/api/admin/shipping/rates/${editingRate.id}`
-        : '/api/admin/shipping/rates'
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...rateForm,
-          cost: parseFloat(rateForm.cost.toString()),
-          minOrderAmount: rateForm.minOrderAmount ? parseFloat(rateForm.minOrderAmount) : null,
-          maxOrderAmount: rateForm.maxOrderAmount ? parseFloat(rateForm.maxOrderAmount) : null,
-          minWeight: rateForm.minWeight ? parseFloat(rateForm.minWeight) : null,
-          maxWeight: rateForm.maxWeight ? parseFloat(rateForm.maxWeight) : null,
-        }),
-      })
-
-      if (response.ok) {
-        toast.success(`Rate ${editingRate ? 'updated' : 'created'} successfully`)
-        setShowRateModal(false)
-        setEditingRate(null)
-        setRateForm({
-          zoneId: '',
-          name: '',
-          description: '',
-          method: 'flat_rate',
-          cost: 0,
-          minOrderAmount: '',
-          maxOrderAmount: '',
-          minWeight: '',
-          maxWeight: '',
-          estimatedDays: '3-5',
-          isActive: true
-        })
-        fetchShippingData()
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to save rate')
+      const rateInput = {
+        zoneId: rateForm.zoneId,
+        name: rateForm.name,
+        description: rateForm.description || undefined,
+        method: rateForm.method,
+        cost: parseFloat(rateForm.cost.toString()),
+        minOrderAmount: rateForm.minOrderAmount ? parseFloat(rateForm.minOrderAmount) : undefined,
+        maxOrderAmount: rateForm.maxOrderAmount ? parseFloat(rateForm.maxOrderAmount) : undefined,
+        minWeight: rateForm.minWeight ? parseFloat(rateForm.minWeight) : undefined,
+        maxWeight: rateForm.maxWeight ? parseFloat(rateForm.maxWeight) : undefined,
+        estimatedDays: rateForm.estimatedDays,
+        isActive: rateForm.isActive
       }
+
+      if (editingRate) {
+        await updateRate({
+          variables: {
+            id: editingRate.id,
+            input: rateInput
+          }
+        })
+      } else {
+        await createRate({
+          variables: {
+            input: rateInput
+          }
+        })
+      }
+
+      toast.success(`Rate ${editingRate ? 'updated' : 'created'} successfully`)
+      setShowRateModal(false)
+      setEditingRate(null)
+      setRateForm({
+        zoneId: '',
+        name: '',
+        description: '',
+        method: 'flat_rate',
+        cost: 0,
+        minOrderAmount: '',
+        maxOrderAmount: '',
+        minWeight: '',
+        maxWeight: '',
+        estimatedDays: '3-5',
+        isActive: true
+      })
+      refetchRates()
     } catch (error) {
       console.error('Error saving rate:', error)
       toast.error('Failed to save rate')
@@ -232,17 +227,11 @@ export default function ShippingPage() {
     if (!confirm('Are you sure you want to delete this shipping rate?')) return
 
     try {
-      const response = await fetch(`/api/admin/shipping/rates/${rateId}`, {
-        method: 'DELETE',
+      await deleteRateMutation({
+        variables: { id: rateId }
       })
-
-      if (response.ok) {
-        toast.success('Rate deleted successfully')
-        fetchShippingData()
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to delete rate')
-      }
+      toast.success('Rate deleted successfully')
+      refetchRates()
     } catch (error) {
       console.error('Error deleting rate:', error)
       toast.error('Failed to delete rate')

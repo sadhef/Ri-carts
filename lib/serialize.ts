@@ -125,8 +125,116 @@ export function serializeReview(review: any) {
     userId: review.userId?.toString(),
     rating: review.rating,
     comment: review.comment,
+    isVerified: Boolean(review.isVerified),
     createdAt: review.createdAt?.toISOString(),
     updatedAt: review.updatedAt?.toISOString(),
+  }
+}
+
+// Specific function for serializing users
+export function serializeUser(user: any) {
+  if (!user) return null
+  
+  return {
+    _id: user._id?.toString(),
+    id: user._id?.toString(),
+    name: user.name,
+    email: user.email,
+    emailVerified: user.emailVerified?.toISOString(),
+    image: user.image,
+    phone: user.phone,
+    address: user.address,
+    city: user.city,
+    state: user.state,
+    zipCode: user.zipCode,
+    country: user.country,
+    dateOfBirth: user.dateOfBirth,
+    role: user.role,
+    tags: Array.isArray(user.tags) ? user.tags : [],
+    status: user.status,
+    lastLoginAt: user.lastLoginAt?.toISOString(),
+    createdAt: user.createdAt?.toISOString(),
+    updatedAt: user.updatedAt?.toISOString(),
+  }
+}
+
+// Specific function for serializing orders
+export function serializeOrder(order: any) {
+  if (!order) return null
+  
+  return {
+    _id: order._id?.toString(),
+    id: order._id?.toString(),
+    userId: order.userId?.toString(),
+    orderNumber: order.orderNumber,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    items: Array.isArray(order.items) ? order.items : [],
+    shippingAddress: order.shippingAddress,
+    paymentMethod: {
+      type: order.paymentMethod?.type || 'razorpay',
+      lastFourDigits: order.paymentMethod?.lastFourDigits || null
+    },
+    totalAmount: Number(order.totalAmount),
+    subtotal: Number(order.subtotal),
+    shippingCost: Number(order.shippingCost || 0),
+    taxAmount: Number(order.taxAmount || 0),
+    savings: order.savings ? Number(order.savings) : undefined,
+    shippingMethod: order.shippingMethod,
+    orderNotes: order.orderNotes,
+    trackingNumber: order.trackingNumber,
+    stripePaymentId: order.stripePaymentId,
+    razorpayOrderId: order.razorpayOrderId,
+    razorpayPaymentId: order.razorpayPaymentId,
+    shippedAt: order.shippedAt?.toISOString(),
+    deliveredAt: order.deliveredAt?.toISOString(),
+    refundId: order.refundId,
+    refundAmount: order.refundAmount ? Number(order.refundAmount) : undefined,
+    refundedAt: order.refundedAt?.toISOString(),
+    createdAt: order.createdAt?.toISOString(),
+    updatedAt: order.updatedAt?.toISOString(),
+  }
+}
+
+
+// Specific function for serializing coupons
+export function serializeCoupon(coupon: any) {
+  if (!coupon) return null
+  
+  return {
+    _id: coupon._id?.toString(),
+    id: coupon._id?.toString(),
+    code: coupon.code,
+    name: coupon.name,
+    description: coupon.description,
+    discountType: coupon.discountType,
+    discountValue: Number(coupon.discountValue),
+    minOrderAmount: coupon.minOrderAmount ? Number(coupon.minOrderAmount) : undefined,
+    maxDiscountAmount: coupon.maxDiscountAmount ? Number(coupon.maxDiscountAmount) : undefined,
+    usageLimit: coupon.usageLimit ? Number(coupon.usageLimit) : undefined,
+    usedCount: Number(coupon.usedCount || 0),
+    isActive: Boolean(coupon.isActive),
+    startDate: coupon.startDate?.toISOString(),
+    endDate: coupon.endDate?.toISOString(),
+    createdAt: coupon.createdAt?.toISOString(),
+    updatedAt: coupon.updatedAt?.toISOString(),
+  }
+}
+
+// Specific function for serializing newsletter subscriptions
+export function serializeNewsletterSubscription(subscription: any) {
+  if (!subscription) return null
+  
+  return {
+    _id: subscription._id?.toString(),
+    id: subscription._id?.toString(),
+    email: subscription.email,
+    name: subscription.name,
+    isActive: Boolean(subscription.isActive),
+    subscribedAt: subscription.subscribedAt?.toISOString(),
+    unsubscribedAt: subscription.unsubscribedAt?.toISOString(),
+    source: subscription.source || 'website', // Default to 'website' if null/undefined
+    tags: Array.isArray(subscription.tags) ? subscription.tags : [],
   }
 }
 
@@ -136,6 +244,110 @@ export function getImageUrl(image: any): string {
   if (typeof image === 'string') return image
   if (typeof image === 'object' && image.url) return image.url
   return '/placeholder.jpg'
+}
+
+// Specific function for serializing shipping zones
+export function serializeShippingZone(zone: any) {
+  if (!zone) return null
+  
+  return {
+    _id: zone._id?.toString(),
+    id: zone._id?.toString(),
+    name: zone.name,
+    countries: Array.isArray(zone.countries) ? zone.countries : [],
+    states: Array.isArray(zone.states) ? zone.states : [],
+    isDefault: Boolean(zone.isDefault),
+    createdAt: zone.createdAt?.toISOString(),
+    updatedAt: zone.updatedAt?.toISOString(),
+  }
+}
+
+// Specific function for serializing shipping rates
+export function serializeShippingRate(rate: any) {
+  if (!rate) return null
+  
+  return {
+    _id: rate._id?.toString(),
+    id: rate._id?.toString(),
+    zoneId: rate.zoneId?.toString(),
+    zoneName: rate.zoneName || '',
+    name: rate.name,
+    description: rate.description,
+    method: rate.method,
+    cost: Number(rate.cost || 0),
+    minOrderAmount: rate.minOrderAmount ? Number(rate.minOrderAmount) : undefined,
+    maxOrderAmount: rate.maxOrderAmount ? Number(rate.maxOrderAmount) : undefined,
+    minWeight: rate.minWeight ? Number(rate.minWeight) : undefined,
+    maxWeight: rate.maxWeight ? Number(rate.maxWeight) : undefined,
+    estimatedDays: rate.estimatedDays,
+    isActive: Boolean(rate.isActive),
+    createdAt: rate.createdAt?.toISOString(),
+    updatedAt: rate.updatedAt?.toISOString(),
+  }
+}
+
+// Specific function for serializing newsletter campaigns
+export function serializeNewsletterCampaign(campaign: any) {
+  if (!campaign) return null
+  
+  const openRate = campaign.recipientCount > 0 ? (campaign.openCount / campaign.recipientCount * 100) : 0
+  const clickRate = campaign.openCount > 0 ? (campaign.clickCount / campaign.openCount * 100) : 0
+  
+  return {
+    _id: campaign._id?.toString(),
+    id: campaign._id?.toString(),
+    subject: campaign.subject,
+    content: campaign.content,
+    status: campaign.status,
+    recipientCount: Number(campaign.recipientCount || 0),
+    openRate: Number(openRate.toFixed(2)),
+    clickRate: Number(clickRate.toFixed(2)),
+    sentAt: campaign.sentAt?.toISOString(),
+    scheduledAt: campaign.scheduledAt?.toISOString(),
+    createdAt: campaign.createdAt?.toISOString(),
+    updatedAt: campaign.updatedAt?.toISOString(),
+  }
+}
+
+// Specific function for serializing store settings
+export function serializeStoreSettings(settings: any) {
+  if (!settings) return null
+  
+  return {
+    _id: settings._id?.toString(),
+    id: settings._id?.toString(),
+    storeName: settings.storeName || 'My Store', // Required field - ensure default
+    storeDescription: settings.storeDescription,
+    storeLogo: settings.storeLogo,
+    favicon: settings.favicon,
+    storeEmail: settings.storeEmail || 'store@example.com', // Required field - ensure default
+    storePhone: settings.storePhone,
+    storeAddress: settings.storeAddress,
+    businessName: settings.businessName,
+    businessAddress: settings.businessAddress,
+    businessPhone: settings.businessPhone,
+    businessEmail: settings.businessEmail,
+    taxId: settings.taxId,
+    vatNumber: settings.vatNumber,
+    registrationNumber: settings.registrationNumber,
+    facebookUrl: settings.facebookUrl,
+    twitterUrl: settings.twitterUrl,
+    instagramUrl: settings.instagramUrl,
+    linkedinUrl: settings.linkedinUrl,
+    privacyPolicy: settings.privacyPolicy,
+    termsOfService: settings.termsOfService,
+    returnPolicy: settings.returnPolicy,
+    shippingPolicy: settings.shippingPolicy,
+    paymentMethods: {
+      razorpay: Boolean(settings.paymentMethods?.razorpay ?? true)
+    },
+    currency: settings.currency || 'INR', // Required field - ensure default
+    timezone: settings.timezone || 'UTC', // Required field - ensure default
+    language: settings.language || 'en', // Required field - ensure default
+    dateFormat: settings.dateFormat || 'MM/DD/YYYY', // Required field - ensure default
+    createdAt: settings.createdAt?.toISOString(),
+    updatedAt: settings.updatedAt?.toISOString(),
+  }
 }
 
 // Utility function to get the first image URL from a product

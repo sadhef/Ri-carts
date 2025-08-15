@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
 import { useSession } from 'next-auth/react'
 import { Star, ThumbsUp, MoreVertical, Edit, Trash2, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import {
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import { GET_PRODUCT_REVIEWS, DELETE_REVIEW } from '@/lib/graphql/queries'
 
 interface Review {
   id: string
@@ -54,56 +56,33 @@ export function ReviewsList({
   refreshTrigger 
 }: ReviewsListProps) {
   const { data: session } = useSession()
-  const [reviews, setReviews] = useState<Review[]>([])
-  const [ratingDistribution, setRatingDistribution] = useState<RatingDistribution[]>([])
-  const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState('newest')
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
 
-  const fetchReviews = async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        productId,
-        page: currentPage.toString(),
-        limit: '10',
-        sortBy
-      })
+  const { data, loading, error, refetch } = useQuery(GET_PRODUCT_REVIEWS, {
+    variables: {
+      productId,
+      page: currentPage,
+      perPage: 10
+    },
+    errorPolicy: 'all'
+  })
 
-      const response = await fetch(`/api/reviews?${params}`)
-      if (response.ok) {
-        const data = await response.json()
-        setReviews(data.reviews)
-        setRatingDistribution(data.ratingDistribution)
-        setTotalPages(data.pagination.pages)
-      }
-    } catch (error) {
-      console.error('Failed to fetch reviews:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [deleteReview] = useMutation(DELETE_REVIEW)
 
-  useEffect(() => {
-    fetchReviews()
-  }, [productId, currentPage, sortBy, refreshTrigger])
+  const reviews = data?.productReviews?.reviews || []
+  const totalPages = Math.ceil((data?.productReviews?.total || 0) / 10)
+  const ratingDistribution = [] // TODO: Add rating distribution calculation
 
   const handleDeleteReview = async (reviewId: string) => {
     if (!confirm('Are you sure you want to delete this review?')) return
 
     try {
-      const response = await fetch(`/api/reviews/${reviewId}`, {
-        method: 'DELETE'
+      await deleteReview({
+        variables: { id: reviewId }
       })
-
-      if (response.ok) {
-        toast.success('Review deleted successfully')
-        fetchReviews()
-      } else {
-        const data = await response.json()
-        toast.error(data.error || 'Failed to delete review')
-      }
+      toast.success('Review deleted successfully')
+      refetch()
     } catch (error) {
       console.error('Error deleting review:', error)
       toast.error('Failed to delete review')

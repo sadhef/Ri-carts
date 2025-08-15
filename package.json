@@ -18,6 +18,9 @@
     "postbuild": "next-sitemap"
   },
   "dependencies": {
+    "@apollo/client": "^3.13.9",
+    "@apollo/server": "^5.0.0",
+    "@as-integrations/next": "^4.0.0",
     "@formatjs/intl-localematcher": "^0.6.1",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -48,6 +51,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
     "embla-carousel-react": "^8.5.2",
+    "graphql": "^16.11.0",
     "lucide-react": "^0.475.0",
     "mongoose": "^8.17.1",
     "multer": "^2.0.2",

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Label } from '@/components/ui/label'
 import { Upload, Save, Store, Building2, FileText, CreditCard } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { GET_SETTINGS, UPDATE_SETTINGS } from '@/lib/graphql/queries'
+import { cleanForInput, getGraphQLErrorMessage } from '@/lib/apollo-utils'
 
 interface StoreSettings {
   // Store Identity
@@ -96,56 +99,101 @@ const defaultSettings: StoreSettings = {
 }
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<StoreSettings>(defaultSettings)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState('store')
-
-  useEffect(() => {
-    fetchSettings()
-  }, [])
-
-  const fetchSettings = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/admin/settings')
-      if (response.ok) {
-        const data = await response.json()
-        setSettings({ ...defaultSettings, ...data })
-      } else {
-        // If no settings exist yet, use defaults
-        setSettings(defaultSettings)
-      }
-    } catch (error) {
-      console.error('Error fetching settings:', error)
+  // GraphQL hooks
+  const { data: settingsData, loading, error, refetch } = useQuery(GET_SETTINGS, {
+    onError: (error) => {
+      console.error('Settings query error:', error)
       toast.error('Failed to load settings')
-    } finally {
-      setLoading(false)
     }
-  }
+  })
+  const [updateSettingsMutation, { loading: saving }] = useMutation(UPDATE_SETTINGS, {
+    onCompleted: (data) => {
+      console.log('Settings updated successfully:', data)
+    },
+    onError: (error) => {
+      console.error('Settings update error:', error)
+    }
+  })
+  
+  const [settings, setSettings] = useState<StoreSettings>(defaultSettings)
+  const [activeTab, setActiveTab] = useState('store')
+  
+  // Update local state when GraphQL data changes
+  useEffect(() => {
+    if (settingsData?.settings) {
+      setSettings({ ...defaultSettings, ...settingsData.settings })
+    }
+  }, [settingsData])
+
+  // Data fetching is now handled by Apollo Client useQuery hook
 
   const saveSettings = async () => {
     try {
-      setSaving(true)
-      const response = await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings),
-      })
-
-      if (response.ok) {
-        toast.success('Settings saved successfully')
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to save settings')
+      // Validate required fields before saving
+      if (!settings.storeName.trim()) {
+        toast.error('Store name is required')
+        return
       }
-    } catch (error) {
+      if (!settings.storeEmail.trim()) {
+        toast.error('Store email is required')
+        return
+      }
+
+      // Create clean input manually
+      const inputSettings = {
+        storeName: settings.storeName.trim(),
+        storeDescription: settings.storeDescription,
+        storeLogo: settings.storeLogo,
+        favicon: settings.favicon,
+        storeEmail: settings.storeEmail.trim(),
+        storePhone: settings.storePhone,
+        storeAddress: settings.storeAddress,
+        businessName: settings.businessName,
+        businessAddress: settings.businessAddress,
+        businessPhone: settings.businessPhone,
+        businessEmail: settings.businessEmail,
+        taxId: settings.taxId,
+        vatNumber: settings.vatNumber,
+        registrationNumber: settings.registrationNumber,
+        facebookUrl: settings.facebookUrl,
+        twitterUrl: settings.twitterUrl,
+        instagramUrl: settings.instagramUrl,
+        linkedinUrl: settings.linkedinUrl,
+        privacyPolicy: settings.privacyPolicy,
+        termsOfService: settings.termsOfService,
+        returnPolicy: settings.returnPolicy,
+        shippingPolicy: settings.shippingPolicy,
+        paymentMethods: {
+          razorpay: true
+        },
+        currency: settings.currency,
+        timezone: settings.timezone,
+        language: settings.language,
+        dateFormat: settings.dateFormat
+      }
+      
+      console.log('SENDING TO MUTATION:', JSON.stringify(inputSettings, null, 2))
+      
+      const result = await updateSettingsMutation({
+        variables: {
+          input: inputSettings
+        },
+        fetchPolicy: 'no-cache'
+      })
+      
+      console.log('Settings save result:', result)
+      toast.success('Settings saved successfully')
+      
+      // Refetch with error handling
+      try {
+        await refetch()
+      } catch (refetchError) {
+        console.error('Error refetching settings:', refetchError)
+        // Don't show error to user as save was successful
+      }
+    } catch (error: any) {
       console.error('Error saving settings:', error)
-      toast.error('Failed to save settings')
-    } finally {
-      setSaving(false)
+      toast.error(getGraphQLErrorMessage(error))
     }
   }
 
@@ -169,6 +217,25 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold mb-6">Store Settings</h1>
         <div className="flex items-center justify-center p-8">
           <div className="text-gray-500">Loading settings...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold mb-6">Store Settings</h1>
+        <div className="flex items-center justify-center p-8">
+          <div className="text-red-500">
+            Error loading settings: {error.message}
+            <button 
+              onClick={() => refetch()} 
+              className="ml-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Retry
+            </button>
+          </div>
         </div>
       </div>
     )

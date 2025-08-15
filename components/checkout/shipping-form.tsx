@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@apollo/client'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import * as z from 'zod'
@@ -17,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { useCart } from '@/store/use-cart'
 import { useToast } from '@/hooks/use-toast'
+import { CREATE_ORDER } from '@/lib/graphql/queries'
 
 const shippingFormSchema = z.object({
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
@@ -35,6 +37,25 @@ export function ShippingForm() {
   const router = useRouter()
   const cart = useCart()
   const { toast } = useToast()
+  
+  const [createOrder] = useMutation(CREATE_ORDER, {
+    onCompleted: (data) => {
+      setLoading(false)
+      // Clear cart after successful order creation
+      cart.clearCart()
+      // Redirect to payment page
+      router.push(`/payment/${data.createOrder.id}`)
+    },
+    onError: (error) => {
+      console.error('[SHIPPING_FORM]', error)
+      setLoading(false)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Something went wrong. Please try again.',
+      })
+    },
+  })
 
   const form = useForm<ShippingFormValues>({
     resolver: zodResolver(shippingFormSchema),
@@ -50,53 +71,46 @@ export function ShippingForm() {
   })
 
   async function onSubmit(data: ShippingFormValues) {
-    try {
-      setLoading(true)
+    setLoading(true)
 
-      const subtotal = cart.items.reduce((total, item) => {
-        return total + item.price * item.quantity
-      }, 0)
+    const subtotal = cart.items.reduce((total, item) => {
+      return total + item.price * item.quantity
+    }, 0)
 
-      const shipping = 10 // Fixed shipping cost
-      const tax = subtotal * 0.1 // 10% tax
-      const total = subtotal + shipping + tax
+    const shippingCost = 10 // Fixed shipping cost
+    const taxAmount = subtotal * 0.1 // 10% tax
+    const totalAmount = subtotal + shippingCost + taxAmount
 
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    await createOrder({
+      variables: {
+        input: {
+          items: cart.items.map(item => ({
+            productId: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            image: item.image || '',
+            sku: item.sku || '',
+          })),
+          shippingAddress: {
+            firstName: data.fullName.split(' ')[0] || data.fullName,
+            lastName: data.fullName.split(' ').slice(1).join(' ') || '',
+            email: data.email,
+            phone: '0000000000', // Default phone since not collected
+            address: data.address,
+            city: data.city,
+            state: data.state,
+            zipCode: data.zipCode,
+            country: data.country,
+          },
+          paymentMethod: {
+            type: 'razorpay',
+          },
+          shippingMethod: 'Standard Delivery',
+          orderNotes: '',
         },
-        body: JSON.stringify({
-          items: cart.items,
-          shippingInfo: data,
-          subtotal,
-          tax,
-          shipping,
-          total,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to create order')
-      }
-
-      const { orderId } = await response.json()
-
-      // Clear cart after successful order creation
-      cart.clearCart()
-
-      // Redirect to payment page
-      router.push(`/payment/${orderId}`)
-    } catch (error) {
-      console.error('[SHIPPING_FORM]', error)
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Something went wrong. Please try again.',
-      })
-    } finally {
-      setLoading(false)
-    }
+      },
+    })
   }
 
   return (

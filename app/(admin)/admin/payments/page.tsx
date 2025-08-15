@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery } from '@apollo/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +21,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Search, Download, Eye, CreditCard, RefreshCw, AlertCircle } from 'lucide-react'
+import { GET_ORDERS } from '@/lib/graphql/queries'
 import { formatCurrency } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
@@ -59,33 +68,55 @@ const paymentMethodIcons = {
 }
 
 export default function PaymentsPage() {
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('all')
   const [dateRange, setDateRange] = useState<string>('all')
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+
+  const { data, loading, error, refetch } = useQuery(GET_ORDERS, {
+    variables: {
+      page: 1,
+      perPage: 100,
+      filters: {
+        ...(statusFilter !== 'all' && { paymentStatus: statusFilter.toUpperCase() })
+      }
+    },
+    errorPolicy: 'all'
+  })
+
+  const orders = data?.orders?.orders || []
+  
+  // Transform orders into transactions
+  const transactions: Transaction[] = orders.map((order: any) => ({
+    id: order.id,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    customerId: order.userId,
+    customerName: order.user?.name,
+    customerEmail: order.user?.email,
+    amount: order.totalAmount,
+    currency: 'INR',
+    paymentMethod: order.paymentMethod?.type || 'unknown',
+    paymentGateway: order.paymentMethod?.type || 'unknown',
+    status: order.paymentStatus?.toLowerCase() || 'pending',
+    transactionId: order.razorpayPaymentId,
+    paymentIntentId: order.razorpayOrderId,
+    refundId: order.refundId,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    refundAmount: order.refundAmount,
+    refundedAt: order.refundedAt
+  }))
 
   useEffect(() => {
-    fetchTransactions()
-  }, [])
+    refetch()
+  }, [statusFilter, refetch])
 
-  const fetchTransactions = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/admin/payments')
-      if (response.ok) {
-        const data = await response.json()
-        setTransactions(data)
-      } else {
-        toast.error('Failed to fetch transactions')
-      }
-    } catch (error) {
-      console.error('Error fetching transactions:', error)
-      toast.error('Error fetching transactions')
-    } finally {
-      setLoading(false)
-    }
+  const viewTransaction = (transaction: Transaction) => {
+    setSelectedTransaction(transaction)
+    setIsViewModalOpen(true)
   }
 
   const retryPayment = async (transactionId: string) => {
@@ -96,7 +127,7 @@ export default function PaymentsPage() {
 
       if (response.ok) {
         toast.success('Payment retry initiated')
-        fetchTransactions()
+        refetch()
       } else {
         const errorData = await response.json()
         toast.error(errorData.error || 'Failed to retry payment')
@@ -365,7 +396,7 @@ export default function PaymentsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          <Button variant="outline" size="sm" onClick={() => alert('View transaction details')}>
+                          <Button variant="outline" size="sm" onClick={() => viewTransaction(transaction)}>
                             <Eye className="w-4 h-4" />
                           </Button>
                           {transaction.status === 'failed' && (
@@ -388,6 +419,150 @@ export default function PaymentsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Transaction Details Modal */}
+      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Transaction Details</DialogTitle>
+            <DialogDescription>
+              Complete transaction information for order #{selectedTransaction?.orderNumber}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedTransaction && (
+            <div className="space-y-6">
+              {/* Transaction Overview */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="font-semibold mb-3">Transaction Information</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Transaction ID:</span>
+                      <span className="font-medium">{selectedTransaction.transactionId || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Order Number:</span>
+                      <span className="font-medium">#{selectedTransaction.orderNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Payment Gateway:</span>
+                      <span className="font-medium capitalize">{selectedTransaction.paymentGateway}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Payment Method:</span>
+                      <span className="font-medium capitalize">{selectedTransaction.paymentMethod}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Status:</span>
+                      <Badge variant="secondary" className={statusColors[selectedTransaction.status]}>
+                        {selectedTransaction.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-3">Customer Information</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Name:</span>
+                      <span className="font-medium">{selectedTransaction.customerName || 'Guest'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Email:</span>
+                      <span className="font-medium">{selectedTransaction.customerEmail}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Customer ID:</span>
+                      <span className="font-medium">{selectedTransaction.customerId}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Details */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold mb-3">Payment Details</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Amount:</span>
+                    <span className="font-bold text-lg">{formatCurrency(selectedTransaction.amount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Currency:</span>
+                    <span className="font-medium">{selectedTransaction.currency}</span>
+                  </div>
+                  {selectedTransaction.paymentIntentId && (
+                    <div className="flex justify-between col-span-2">
+                      <span className="text-gray-600">Payment Intent ID:</span>
+                      <span className="font-medium">{selectedTransaction.paymentIntentId}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Timestamps */}
+              <div>
+                <h3 className="font-semibold mb-3">Timeline</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Created:</span>
+                    <span className="font-medium">
+                      {new Date(selectedTransaction.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Last Updated:</span>
+                    <span className="font-medium">
+                      {new Date(selectedTransaction.updatedAt).toLocaleString()}
+                    </span>
+                  </div>
+                  {selectedTransaction.refundedAt && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Refunded:</span>
+                      <span className="font-medium">
+                        {new Date(selectedTransaction.refundedAt).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Refund Information */}
+              {selectedTransaction.status === 'refunded' && (
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-3 text-red-800">Refund Information</h3>
+                  <div className="space-y-2 text-sm">
+                    {selectedTransaction.refundId && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Refund ID:</span>
+                        <span className="font-medium">{selectedTransaction.refundId}</span>
+                      </div>
+                    )}
+                    {selectedTransaction.refundAmount && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Refund Amount:</span>
+                        <span className="font-medium">{formatCurrency(selectedTransaction.refundAmount)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Failure Information */}
+              {selectedTransaction.status === 'failed' && selectedTransaction.failureReason && (
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-3 text-red-800">Failure Information</h3>
+                  <div className="text-sm">
+                    <span className="text-red-600">{selectedTransaction.failureReason}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

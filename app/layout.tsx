@@ -5,6 +5,7 @@ import './globals.css'
 import { auth } from '@/auth'
 import { SessionProvider } from '@/components/providers/session-provider'
 import { CartProvider } from '@/components/providers/cart-provider'
+import { ApolloProviderWrapper } from '@/components/providers/apollo-provider'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -86,10 +87,12 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <SessionProvider session={session}>
-          <CartProvider>
-            {children}
-            <Toaster />
-          </CartProvider>
+          <ApolloProviderWrapper>
+            <CartProvider>
+              {children}
+              <Toaster />
+            </CartProvider>
+          </ApolloProviderWrapper>
         </SessionProvider>
       </body>
     </html>

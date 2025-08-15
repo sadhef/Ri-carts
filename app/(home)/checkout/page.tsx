@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
+import { useMutation } from '@apollo/client'
 import Image from 'next/image'
 import { CreditCard, Truck, Package, ArrowLeft, Check, IndianRupee } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useCart } from '@/store/use-cart'
+import { CREATE_ORDER } from '@/lib/graphql/queries'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 
@@ -50,6 +52,8 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false)
   const [currentStep, setCurrentStep] = useState(1)
   const [razorpayLoaded, setRazorpayLoaded] = useState(false)
+  
+  const [createOrder] = useMutation(CREATE_ORDER)
 
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
     firstName: session?.user?.name?.split(' ')[0] || '',
@@ -140,49 +144,49 @@ export default function CheckoutPage() {
     }
   }
 
-  const createOrder = async (): Promise<RazorpayOrderResponse> => {
-    const orderData = {
-      items: cart.items,
+  const createOrderMutation = async (): Promise<RazorpayOrderResponse> => {
+    const orderInput = {
+      items: cart.items.map(item => ({
+        productId: item.productId,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        image: item.image || '',
+        sku: item.sku || ''
+      })),
       shippingAddress,
+      paymentMethod: { type: 'razorpay' },
       shippingMethod,
-      orderNotes,
-      subtotal,
-      shippingCost,
-      taxAmount,
-      totalAmount
+      orderNotes: orderNotes || ''
     }
 
-    const response = await fetch('/api/orders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(orderData)
-    })
+    try {
+      const { data } = await createOrder({
+        variables: { input: orderInput }
+      })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Failed to create order: ${errorText}`)
+      const order = data.createOrder
+      
+      // Create Razorpay order (still using REST API for payment processing)
+      const paymentResponse = await fetch('/api/payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ orderId: order.id })
+      })
+
+      if (!paymentResponse.ok) {
+        const errorText = await paymentResponse.text()
+        console.error('Payment API Error:', errorText)
+        throw new Error(`Failed to create payment order: ${errorText}`)
+      }
+
+      return await paymentResponse.json()
+    } catch (error) {
+      console.error('Error creating order:', error)
+      throw error
     }
-
-    const order = await response.json()
-    
-    // Create Razorpay order
-    const paymentResponse = await fetch('/api/payment', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ orderId: order.id })
-    })
-
-    if (!paymentResponse.ok) {
-      const errorText = await paymentResponse.text()
-      console.error('Payment API Error:', errorText)
-      throw new Error(`Failed to create payment order: ${errorText}`)
-    }
-
-    return await paymentResponse.json()
   }
 
   const handlePaymentSuccess = async (response: any) => {
@@ -233,7 +237,7 @@ export default function CheckoutPage() {
     setLoading(true)
     
     try {
-      const razorpayOrder = await createOrder()
+      const razorpayOrder = await createOrderMutation()
       
       const options = {
         key: razorpayOrder.key,

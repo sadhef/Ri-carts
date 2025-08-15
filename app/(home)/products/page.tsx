@@ -2,15 +2,14 @@
 
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { useQuery } from '@apollo/client'
+import { GET_PRODUCTS } from '@/lib/graphql/queries'
 import { ProductGrid } from '@/components/products/product-grid'
 import { ProductSidebar } from '@/components/products/product-sidebar'
 
 export default function ProductsPage() {
   const searchParams = useSearchParams()
-  const [products, setProducts] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
 
   const category = searchParams.get('category')
   const search = searchParams.get('search')
@@ -18,33 +17,49 @@ export default function ProductsPage() {
   const maxPrice = searchParams.get('maxPrice')
   const sort = searchParams.get('sort')
 
-  useEffect(() => {
-    const fetchProducts = async () => {
-      setLoading(true)
-      try {
-        const queryParams = new URLSearchParams({
-          page: currentPage.toString(),
-          ...(category && { category }),
-          ...(search && { search }),
-          ...(minPrice && { minPrice }),
-          ...(maxPrice && { maxPrice }),
-          ...(sort && { sort }),
-        })
+  // Build GraphQL variables
+  const filters: any = {}
+  if (category) filters.category = category
+  if (search) filters.search = search
+  if (minPrice) filters.minPrice = parseFloat(minPrice)
+  if (maxPrice) filters.maxPrice = parseFloat(maxPrice)
 
-        const response = await fetch(`/api/products?${queryParams}`)
-        const data = await response.json()
-
-        setProducts(data.products)
-        setTotalPages(Math.ceil(data.total / data.perPage))
-      } catch (error) {
-        console.error('Error fetching products:', error)
-      } finally {
-        setLoading(false)
-      }
+  let sortObj: any = undefined
+  if (sort) {
+    switch (sort) {
+      case 'price_asc':
+        sortObj = { field: 'price', order: 'ASC' }
+        break
+      case 'price_desc':
+        sortObj = { field: 'price', order: 'DESC' }
+        break
+      case 'name_asc':
+        sortObj = { field: 'name', order: 'ASC' }
+        break
+      case 'name_desc':
+        sortObj = { field: 'name', order: 'DESC' }
+        break
+      case 'createdAt_asc':
+        sortObj = { field: 'createdAt', order: 'ASC' }
+        break
+      case 'createdAt_desc':
+      case 'newest':
+        sortObj = { field: 'createdAt', order: 'DESC' }
+        break
     }
+  }
 
-    fetchProducts()
-  }, [category, search, minPrice, maxPrice, sort, currentPage])
+  const { data, loading, error } = useQuery(GET_PRODUCTS, {
+    variables: {
+      page: currentPage,
+      perPage: 12,
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
+      sort: sortObj,
+    },
+  })
+
+  const products = data?.products?.products || []
+  const totalPages = data?.products ? Math.ceil(data.products.total / data.products.perPage) : 1
 
   return (
     <div className='rr-container py-12'>
@@ -53,7 +68,7 @@ export default function ProductsPage() {
           {search ? `Search: "${search}"` : category ? `${category} Collection` : 'All Products'}
         </h1>
         <p className='rr-body text-black/60'>
-          {loading ? 'Loading our collection...' : `${products.length} products available`}
+          {loading ? 'Loading our collection...' : error ? 'Error loading products' : `${data?.products?.total || 0} products available`}
         </p>
       </div>
 

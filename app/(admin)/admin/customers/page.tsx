@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Search, Eye, Mail, Ban, CheckCircle, Download, Tag, Plus } from 'lucide-react'
+import { GET_USERS, UPDATE_USER, DELETE_USER } from '@/lib/graphql/queries'
 import { Role } from '@/types'
 import { formatCurrency } from '@/lib/utils'
 import toast from 'react-hot-toast'
@@ -30,18 +32,19 @@ interface Customer {
   name?: string
   email: string
   role: Role
-  emailVerified?: string
-  createdAt: string
+  status: string
+  phone?: string
+  city?: string
+  country?: string
   lastLoginAt?: string
-  orderCount: number
-  totalSpent: number
-  status: 'active' | 'inactive' | 'banned'
+  createdAt: string
   tags?: string[]
+  // Order statistics calculated from actual order data
+  orderCount?: number
+  totalSpent?: number
 }
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -50,139 +53,109 @@ export default function CustomersPage() {
   const [newTag, setNewTag] = useState('')
   const [availableTags] = useState(['VIP', 'Wholesale', 'Premium', 'Regular', 'New Customer', 'Frequent Buyer'])
 
+  const { data, loading, error, refetch } = useQuery(GET_USERS, {
+    variables: {
+      page: 1,
+      perPage: 100,
+      filters: {
+        ...(roleFilter !== 'all' && { role: roleFilter }),
+        ...(statusFilter !== 'all' && { status: statusFilter })
+      }
+    },
+    errorPolicy: 'all'
+  })
+
+  const [updateUser] = useMutation(UPDATE_USER, {
+    onCompleted: () => {
+      refetch()
+    },
+    onError: (error) => {
+      console.error('Error updating user:', error)
+      toast.error('Failed to update customer')
+    }
+  })
+
+  const customers = data?.users?.users || []
+
   useEffect(() => {
-    fetchCustomers()
-  }, [])
+    refetch()
+  }, [roleFilter, statusFilter, refetch])
 
-  const fetchCustomers = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/admin/customers')
-      if (response.ok) {
-        const data = await response.json()
-        setCustomers(data)
-      } else {
-        console.error('Failed to fetch customers')
-      }
-    } catch (error) {
-      console.error('Error fetching customers:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const updateCustomerStatus = async (customerId: string, newStatus: string) => {
-    try {
-      const response = await fetch(`/api/admin/customers/${customerId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      })
-
-      if (response.ok) {
-        toast.success(`Customer status updated to ${newStatus}`)
-        fetchCustomers() // Refresh customers
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to update customer status')
-      }
-    } catch (error) {
-      console.error('Error updating customer status:', error)
-      toast.error('Failed to update customer status')
-    }
-  }
-
-  const addCustomerTag = async (customerId: string, tag: string) => {
-    try {
-      const response = await fetch(`/api/admin/customers/${customerId}/tags`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ tag }),
-      })
-
-      if (response.ok) {
-        toast.success(`Tag "${tag}" added to customer`)
-        // Update the selected customer's tags immediately for better UX
-        if (selectedCustomer && selectedCustomer.id === customerId) {
-          setSelectedCustomer({
-            ...selectedCustomer,
-            tags: [...(selectedCustomer.tags || []), tag]
-          })
+  const updateCustomerStatus = (customerId: string, newStatus: string) => {
+    updateUser({
+      variables: {
+        id: customerId,
+        input: {
+          status: newStatus
         }
-        fetchCustomers() // Refresh customers
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to add tag')
       }
-    } catch (error) {
-      console.error('Error adding customer tag:', error)
-      toast.error('Failed to add tag')
-    }
+    }).then(() => {
+      toast.success(`Customer status updated to ${newStatus}`)
+    })
   }
 
-  const removeCustomerTag = async (customerId: string, tag: string) => {
-    try {
-      const response = await fetch(`/api/admin/customers/${customerId}/tags`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ tag }),
-      })
+  const addCustomerTag = (customerId: string, tag: string) => {
+    const customer = customers.find((c: any) => c.id === customerId)
+    const currentTags = customer?.tags || []
+    const updatedTags = [...currentTags, tag]
 
-      if (response.ok) {
-        toast.success(`Tag "${tag}" removed from customer`)
-        // Update the selected customer's tags immediately for better UX
-        if (selectedCustomer && selectedCustomer.id === customerId) {
-          setSelectedCustomer({
-            ...selectedCustomer,
-            tags: (selectedCustomer.tags || []).filter(t => t !== tag)
-          })
+    updateUser({
+      variables: {
+        id: customerId,
+        input: {
+          tags: updatedTags
         }
-        fetchCustomers() // Refresh customers
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to remove tag')
       }
-    } catch (error) {
-      console.error('Error removing customer tag:', error)
-      toast.error('Failed to remove tag')
-    }
+    }).then(() => {
+      toast.success(`Tag "${tag}" added to customer`)
+      // Update the selected customer's tags immediately for better UX
+      if (selectedCustomer && selectedCustomer.id === customerId) {
+        setSelectedCustomer({
+          ...selectedCustomer,
+          tags: updatedTags
+        })
+      }
+    })
   }
 
-  const handleViewCustomer = async (customer: Customer) => {
-    try {
-      const response = await fetch(`/api/admin/customers/${customer.id}`)
-      if (response.ok) {
-        const customerDetails = await response.json()
-        // Create a detailed view modal or alert with customer information
-        const details = `
+  const removeCustomerTag = (customerId: string, tag: string) => {
+    const customer = customers.find((c: any) => c.id === customerId)
+    const currentTags = customer?.tags || []
+    const updatedTags = currentTags.filter((t: string) => t !== tag)
+
+    updateUser({
+      variables: {
+        id: customerId,
+        input: {
+          tags: updatedTags
+        }
+      }
+    }).then(() => {
+      toast.success(`Tag "${tag}" removed from customer`)
+      // Update the selected customer's tags immediately for better UX
+      if (selectedCustomer && selectedCustomer.id === customerId) {
+        setSelectedCustomer({
+          ...selectedCustomer,
+          tags: updatedTags
+        })
+      }
+    })
+  }
+
+  const handleViewCustomer = (customer: Customer) => {
+    const details = `
 Customer Details:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-Name: ${customerDetails.name || 'No Name'}
-Email: ${customerDetails.email}
-Role: ${customerDetails.role}
-Status: ${customerDetails.status}
-Email Verified: ${customerDetails.emailVerified ? 'Yes' : 'No'}
-Orders: ${customerDetails.orderCount || 0}
-Total Spent: ${formatCurrency(customerDetails.totalSpent || 0)}
-Joined: ${new Date(customerDetails.createdAt).toLocaleDateString()}
-${customerDetails.lastLoginAt ? `Last Login: ${new Date(customerDetails.lastLoginAt).toLocaleDateString()}` : ''}
-${customerDetails.phone ? `Phone: ${customerDetails.phone}` : ''}
-${customerDetails.address ? `Address: ${customerDetails.address}` : ''}
-        `
-        alert(details.trim())
-      } else {
-        toast.error('Failed to load customer details')
-      }
-    } catch (error) {
-      console.error('Error fetching customer details:', error)
-      toast.error('Failed to load customer details')
-    }
+Name: ${customer.name || 'No Name'}
+Email: ${customer.email}
+Role: ${customer.role}
+Status: ${customer.status}
+Orders: ${customer.orderCount || 0}
+Total Spent: ${formatCurrency(customer.totalSpent || 0)}
+Joined: ${new Date(customer.createdAt).toLocaleDateString()}
+${customer.lastLoginAt ? `Last Login: ${new Date(customer.lastLoginAt).toLocaleDateString()}` : ''}
+    `
+    alert(details.trim())
   }
 
   const handleEmailCustomer = (customer: Customer) => {
@@ -231,7 +204,7 @@ ${customerDetails.address ? `Address: ${customerDetails.address}` : ''}
     }
   }
 
-  const filteredCustomers = customers.filter(customer => {
+  const filteredCustomers = customers.filter((customer: Customer) => {
     const matchesSearch = 
       customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (customer.name && customer.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -244,11 +217,14 @@ ${customerDetails.address ? `Address: ${customerDetails.address}` : ''}
 
   const getStatusBadge = (status: string) => {
     const colors = {
+      ACTIVE: 'bg-green-100 text-green-800',
       active: 'bg-green-100 text-green-800',
+      INACTIVE: 'bg-gray-100 text-gray-800', 
       inactive: 'bg-gray-100 text-gray-800',
+      BANNED: 'bg-red-100 text-red-800',
       banned: 'bg-red-100 text-red-800',
     }
-    return colors[status as keyof typeof colors] || colors.active
+    return colors[status as keyof typeof colors] || colors.ACTIVE
   }
 
   if (loading) {
@@ -285,7 +261,7 @@ ${customerDetails.address ? `Address: ${customerDetails.address}` : ''}
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-green-600">
-              {customers.filter(c => c.status === 'active').length}
+              {customers.filter((c: Customer) => c.status === 'ACTIVE').length}
             </div>
             <p className="text-gray-600 text-sm">Active</p>
           </CardContent>
@@ -293,7 +269,7 @@ ${customerDetails.address ? `Address: ${customerDetails.address}` : ''}
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-blue-600">
-              {customers.filter(c => c.role === Role.ADMIN).length}
+              {customers.filter((c: Customer) => c.role === Role.ADMIN).length}
             </div>
             <p className="text-gray-600 text-sm">Admins</p>
           </CardContent>
@@ -301,7 +277,7 @@ ${customerDetails.address ? `Address: ${customerDetails.address}` : ''}
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-orange-600">
-              {formatCurrency(customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0))}
+              {formatCurrency(customers.reduce((sum: number, c: Customer) => sum + (c.totalSpent || 0), 0))}
             </div>
             <p className="text-gray-600 text-sm">Total Revenue</p>
           </CardContent>
@@ -342,9 +318,9 @@ ${customerDetails.address ? `Address: ${customerDetails.address}` : ''}
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="banned">Banned</SelectItem>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="INACTIVE">Inactive</SelectItem>
+                <SelectItem value="BANNED">Banned</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -420,8 +396,8 @@ ${customerDetails.address ? `Address: ${customerDetails.address}` : ''}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className={getStatusBadge(customer.status)}>
-                        {customer.status}
+                      <Badge variant="secondary" className={getStatusBadge(customer.status || 'active')}>
+                        {customer.status || 'active'}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">
@@ -453,16 +429,16 @@ ${customerDetails.address ? `Address: ${customerDetails.address}` : ''}
                           <Tag className="w-4 h-4" />
                         </Button>
                         <Select 
-                          value={customer.status} 
+                          value={customer.status || 'ACTIVE'} 
                           onValueChange={(value) => updateCustomerStatus(customer.id, value)}
                         >
                           <SelectTrigger className="w-[100px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="inactive">Inactive</SelectItem>
-                            <SelectItem value="banned">Banned</SelectItem>
+                            <SelectItem value="ACTIVE">Active</SelectItem>
+                            <SelectItem value="INACTIVE">Inactive</SelectItem>
+                            <SelectItem value="BANNED">Banned</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

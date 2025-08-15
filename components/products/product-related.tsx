@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useQuery } from '@apollo/client'
 import { Product } from '@/types'
 import { ProductCard } from '@/components/ui/product-card'
+import { GET_RELATED_PRODUCTS } from '@/lib/graphql/queries'
 import {
   Carousel,
   CarouselContent,
@@ -20,26 +21,15 @@ export function ProductRelated({
   categoryId,
   currentProductId,
 }: ProductRelatedProps) {
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data, loading, error } = useQuery(GET_RELATED_PRODUCTS, {
+    variables: {
+      productId: currentProductId,
+      limit: 6
+    },
+    errorPolicy: 'all'
+  })
 
-  useEffect(() => {
-    const fetchRelatedProducts = async () => {
-      try {
-        const response = await fetch(
-          `/api/products/related?categoryId=${categoryId}&currentProductId=${currentProductId}`
-        )
-        const data = await response.json()
-        setProducts(data)
-      } catch (error) {
-        console.error('Error fetching related products:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchRelatedProducts()
-  }, [categoryId, currentProductId])
+  const products = data?.relatedProducts || []
 
   if (loading) {
     return <div>Loading related products...</div>

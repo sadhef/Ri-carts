@@ -71,7 +71,7 @@ const cartStore = (set: any, get: any) => ({
           ...state.items,
           { 
             ...item, 
-            id: `cart_${item.productId}_${Date.now()}`,
+            id: `cart_item_${item.productId}_${Date.now()}`,
             quantity: Math.min(item.quantity, item.stock)
           },
         ]
